@@ -1,0 +1,15 @@
+{
+  "name": "donut-web",
+  "version": "1.0.0",
+  "description": "DigiStay Donut — hosted web app (quotation builder + POC dashboard) backed by shared Zoho, HubSpot and Razorpay credentials, with Google SSO restricted to digistay.ai.",
+  "main": "server.js",
+  "type": "commonjs",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-session": "^1.18.0"
+  }
+}

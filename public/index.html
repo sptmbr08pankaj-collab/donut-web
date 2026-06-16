@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+/* Web shim: route the Cowork connector bridge to our backend gateway. */
+window.cowork={callMcpTool:async function(name,args){
+  try{
+    const res=await fetch("/api/mcp",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({name:name,args:args})});
+    if(res.status===401){location.href="/login";return {isError:true,content:[{text:"Not signed in"}]};}
+    const data=await res.json();
+    if(!res.ok||(data&&data.error)){return {isError:true,content:[{text:(data&&(data.error||data.message))||("HTTP "+res.status)}]};}
+    return {structuredContent:data};
+  }catch(e){return {isError:true,content:[{text:String(e&&e.message||e)}]};}
+}};
+</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🍩 Donut</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+<style>
+
+:root{ color-scheme: light; --bg:#f6f7f9; --card:#ffffff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+  --brand:#0f766e; --brand-d:#0b5a54; --brand-l:#e6f3f1; --accent:#4f46e5; --danger:#dc2626; --ok:#16a34a; --warn:#b45309; --warn-bg:#fef3c7;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+h1,h2,h3,h4{margin:0;font-weight:650}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:7px 12px;}
+button:hover{background:#f8fafc}
+button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+button.primary:hover{background:var(--brand-d)}
+button.accent{background:var(--accent);border-color:var(--accent);color:#fff}
+button.ghost{background:transparent}
+button.danger{color:var(--danger);border-color:#f1c4c4}
+button.danger:hover{background:#fef2f2}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,select,textarea{font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--brand-l);border-color:var(--brand)}
+label{display:block;font-size:12px;color:var(--muted);margin:0 0 3px}
+.topbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:9px;font-weight:750;font-size:16px;color:var(--brand)}
+.brand .dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--brand),var(--accent));display:inline-block}
+.spacer{flex:1}
+.toolbtns{display:flex;gap:7px;flex-wrap:wrap}
+.wrap{max-width:1400px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:1000px){.wrap{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.card h3{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.row{display:grid;gap:10px}
+.row.c2{grid-template-columns:1fr 1fr}
+.row.c3{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:560px){.row.c2,.row.c3{grid-template-columns:1fr}}
+.hint{font-size:12px;color:var(--muted)}
+.banner{display:none;background:var(--warn-bg);color:var(--warn);border:1px solid #fde68a;border-radius:8px;padding:8px 11px;margin:0 16px 0;font-size:13px;align-items:center;gap:10px}
+.banner.show{display:flex}
+.results{position:relative}
+.dropdown{position:absolute;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.12);max-height:300px;overflow:auto;z-index:30;display:none}
+.dropdown.show{display:block}
+.opt{padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer}
+.opt:hover{background:var(--brand-l)}
+.opt:last-child{border-bottom:0}
+.opt .nm{font-weight:600}
+.opt .meta{font-size:12px;color:var(--muted)}
+#signinOverlay{position:fixed;inset:0;z-index:9999;background:rgba(248,250,252,.97);display:flex;align-items:center;justify-content:center;padding:20px}
+#signinCard{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.20);max-width:430px;width:100%;padding:26px}
+#signinCard h2{margin:0 0 6px;font-size:20px}
+#signinCard .sub{color:var(--muted);font-size:13px;margin-bottom:16px;line-height:1.45}
+#signinCard input{width:100%;margin-bottom:10px}
+#signinMsg{font-size:13px;margin-top:10px;min-height:18px}
+#ownerPick{margin-top:12px;max-height:210px;overflow:auto;border:1px solid var(--line);border-radius:10px;display:none}
+#ownerPick .opt{padding:9px 11px;border-bottom:1px solid var(--line);cursor:pointer}
+#ownerPick .opt:last-child{border-bottom:0}
+#ownerPick .opt:hover{background:var(--brand-l)}
+.pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--brand-l);color:var(--brand-d);border:1px solid #cdeae6}
+.pill.gray{background:#f1f5f9;color:var(--muted);border-color:var(--line)}
+.pill.live{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+table.lines{width:100%;border-collapse:collapse}
+table.lines th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:6px 6px;border-bottom:1px solid var(--line)}
+table.lines td{padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.lines tr.det td{border-bottom:1px solid var(--line);background:#fafafa}
+table.lines input{padding:6px 7px}
+.num{text-align:right}
+.tot{display:flex;justify-content:space-between;padding:4px 0}
+.tot.grand{font-size:18px;font-weight:750;border-top:2px solid var(--ink);margin-top:6px;padding-top:8px}
+.x{color:var(--danger);border:0;background:transparent;font-size:16px;padding:2px 6px}
+.lk{border:0;background:transparent;color:var(--brand);cursor:pointer;font-size:12px;padding:2px 4px}
+.muted{color:var(--muted)}
+.flexrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chk{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+.chk input{width:auto}
+details.seller{margin-top:6px}
+details.seller summary{cursor:pointer;color:var(--brand);font-size:13px}
+.loading{font-size:12px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0}
+.logobox{display:flex;align-items:center;gap:12px;margin-top:8px}
+.logobox img{max-height:48px;max-width:180px;border:1px solid var(--line);border-radius:6px;padding:3px;background:#fff}
+/* Preview / quote document */
+.preview-wrap{position:sticky;top:64px}
+#quoteDoc{background:#fff;border:1px solid var(--line);border-radius:12px;padding:26px;color:var(--ink)}
+.qd-head{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid var(--brand);padding-bottom:14px;margin-bottom:14px}
+.qd-logo img{max-height:52px;max-width:200px}
+.qd-sub{font-size:12px;color:var(--muted);margin-top:4px;white-space:pre-line}
+.qd-title{text-align:right}
+.qd-title .t{font-size:20px;font-weight:800;letter-spacing:.04em;color:var(--ink)}
+.qd-meta{font-size:12px;color:var(--muted);margin-top:4px}
+.qd-parties{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}
+.qd-parties h4{font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.05em;margin-bottom:4px}
+.qd-parties .b{font-size:13px;white-space:pre-line}
+table.qd{width:100%;border-collapse:collapse;margin-top:6px}
+table.qd th{background:var(--brand);color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.03em;padding:8px;text-align:left}
+table.qd th.num,table.qd td.num{text-align:right}
+table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top}
+.qd-feat{margin:5px 0 0;padding-left:16px;color:var(--muted);font-size:11px;columns:2;column-gap:18px}
+.qd-feat li{margin:1px 0}
+.qd-tot{margin-left:auto;width:320px;max-width:100%;margin-top:12px;font-size:13px}
+.qd-note{margin-top:16px;font-size:12px;color:var(--muted);white-space:pre-line;border-top:1px dashed var(--line);padding-top:10px}
+.empty{color:var(--muted);text-align:center;padding:26px;font-size:13px}
+.steph{font-weight:650;font-size:13px;margin:2px 0 10px;color:var(--ink)}
+.blocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.block{border:1px solid var(--line);border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:6px;background:#fff}
+.block .bk-name{font-weight:650;font-size:13px}
+.block .bk-price{color:var(--brand-d);font-weight:650;font-size:13px}
+.block .bk-feat{margin:2px 0 0;padding-left:15px;font-size:11px;color:var(--muted);max-height:96px;overflow:hidden}
+.block .bk-feat li{margin:1px 0}
+.block button{margin-top:auto}
+.block.disabled{opacity:.6;background:#fafafa}
+.block.sel{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-l);background:var(--brand-l)}
+.block button.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.block button.on:hover{background:#15803d}
+.tabs{display:flex;gap:4px;margin:6px 0 12px;border-bottom:1px solid var(--line)}
+.tab{border:0;border-bottom:2px solid transparent;background:transparent;border-radius:0;padding:7px 12px;color:var(--muted);font-weight:600}
+.tab.active{color:var(--brand);border-bottom-color:var(--brand)}
+.orline{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:14px 0}
+.orline:before,.orline:after{content:"";height:1px;background:var(--line);flex:1}
+.ctx{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+@media print{
+  body{background:#fff}
+  .topbar,.banner,.builder,.preview-wrap > .nonprint,#signinOverlay{display:none !important}
+  .wrap{display:block;padding:0;max-width:none}
+  .preview-wrap{position:static}
+  #quoteDoc{border:0;border-radius:0;padding:0}
+  .qd-feat{columns:2}
+}
+
+#view-dashboard .wrap{max-width:1280px;margin:0 auto;padding:16px}#view-dashboard h1{font-size:19px;margin:0;font-weight:750;color:var(--brand);display:flex;align-items:center;gap:9px}#view-dashboard h1 .dot{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--brand),var(--accent));display:inline-block}#view-dashboard h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:22px 0 10px}#view-dashboard .topbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}#view-dashboard .spacer{flex:1}#view-dashboard .hint{font-size:12px;color:var(--muted)}#view-dashboard .frow{display:flex;gap:16px;flex-wrap:wrap;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:10px}#view-dashboard .frow .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}#view-dashboard .chips{display:flex;gap:6px;flex-wrap:wrap}#view-dashboard .chip{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;text-transform:none;letter-spacing:0}#view-dashboard .chip:hover{border-color:var(--brand)}#view-dashboard .chip.on{background:var(--brand);border-color:var(--brand);color:#fff}#view-dashboard button,#view-dashboard select,#view-dashboard input{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:6px 9px;cursor:pointer}#view-dashboard input[type=date]{cursor:text}#view-dashboard button.primary{background:var(--brand);border-color:var(--brand);color:#fff}#view-dashboard button.ghost{background:transparent}#view-dashboard .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}#view-dashboard .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px}#view-dashboard .kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}#view-dashboard .kpi .v{font-size:21px;font-weight:750;margin-top:5px}#view-dashboard .kpi .s{font-size:11px;color:var(--muted);margin-top:3px}#view-dashboard .rankcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}#view-dashboard .rank{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px}#view-dashboard .rank .t{font-size:12px;color:var(--muted);font-weight:600}#view-dashboard .rank .w{font-size:16px;font-weight:750;margin-top:4px}#view-dashboard .rank ol{margin:8px 0 0;padding-left:20px;font-size:12px;color:var(--muted)}#view-dashboard .rank ol li{margin:2px 0}#view-dashboard .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;overflow-x:auto}#view-dashboard .chartbox{height:300px;position:relative}#view-dashboard table{width:100%;border-collapse:collapse;font-size:13px}#view-dashboard th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:right;padding:8px 8px;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap}#view-dashboard th:first-child,#view-dashboard td:first-child{text-align:left}#view-dashboard td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}#view-dashboard tr:hover td{background:#fafafa}#view-dashboard .bar{height:9px;border-radius:5px;background:var(--brand);display:inline-block;vertical-align:middle}#view-dashboard .barwrap{display:flex;align-items:center;gap:8px;justify-content:flex-end}#view-dashboard #status{font-size:12px;color:var(--muted)}#view-dashboard .grid2{display:grid;grid-template-columns:1fr;gap:16px}@media(min-width:920px){#view-dashboard .grid2{grid-template-columns:1fr 1fr}}#view-dashboard .note{font-size:11px;color:var(--muted);margin-top:6px}#view-dashboard .empty{padding:24px;text-align:center;color:var(--muted)}
+.appnav{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--line);display:flex;gap:8px;padding:8px 16px;align-items:center}.appnav .brandmark{font-weight:800;color:var(--brand);margin-right:6px;display:flex;align-items:center;gap:7px;font-size:16px}.navtab{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 14px;font-weight:650;cursor:pointer;color:var(--muted)}.navtab.active{background:var(--brand);color:#fff;border-color:var(--brand)}#view-builder .topbar{top:45px}@media print{.appnav{display:none!important}#view-dashboard{display:none!important}}
+</style>
+</head>
+<body>
+<div class="appnav"><span class="brandmark"><span style="font-size:19px">🍩</span> Donut</span><button class="navtab active" data-view="builder">🧾 Quote Builder</button><button class="navtab" data-view="dashboard">📊 Performance</button></div>
+<div id="view-builder">
+
+<div class="topbar">
+  <div class="brand"><span class="dot"></span> DigiStay <span class="muted" style="font-weight:500;font-size:12px">Quotation Builder</span></div>
+  <span id="whoami" class="pill gray" style="cursor:pointer;display:none" title="Switch user / sign out"></span>
+  <div class="spacer"></div>
+  <div class="results" style="width:auto;min-width:250px">
+    <input id="quoteSearch" placeholder="🔍 Find saved quote by customer…" autocomplete="off" style="width:250px">
+    <div id="quoteResults" class="dropdown"></div>
+  </div>
+  <div class="toolbtns">
+    <button id="newBtn">+ New</button>
+    <button id="dupBtn" class="ghost">Duplicate</button>
+    <button id="saveBtn" class="primary">Save</button>
+    <button id="pdfBtn">⬇ PDF</button>
+    <button id="emailBtn" class="accent" title="Send the estimate to the customer via Zoho">✉ Send via Zoho</button>
+    <button id="delBtn" class="ghost" title="Locked — quotations can only be deleted in Zoho by an admin">🔒 Delete</button>
+  </div>
+</div>
+
+<div id="priceBanner" class="banner"></div>
+<div id="statusBanner" class="banner" style="background:#ecfdf5;color:#065f46;border-color:#a7f3d0"></div>
+
+<div class="wrap">
+  <!-- LEFT: builder -->
+  <div class="builder">
+    <div class="card">
+      <h3>Customer <span id="custLoad" class="loading"></span></h3>
+      <div class="results">
+        <input id="custSearch" placeholder="Search HubSpot — name, email or phone…" autocomplete="off">
+        <div id="custResults" class="dropdown"></div>
+      </div>
+      <div class="row c2" style="margin-top:10px">
+        <div><label>Customer / Hotel name</label><input id="custName"></div>
+        <div><label>Property name</label><input id="propertyName"></div>
+      </div>
+      <div class="row c3" style="margin-top:10px">
+        <div><label>Email</label><input id="custEmail"></div>
+        <div><label>Phone</label><input id="custPhone"></div>
+        <div><label>Room count <span class="hint">(auto)</span></label><input id="roomCount" type="number" min="0"></div>
+      </div>
+      <div class="row c3" style="margin-top:10px">
+        <div><label>City</label><input id="custCity"></div>
+        <div><label>State (for GST)</label><input id="custState" placeholder="auto from HubSpot / PIN"></div>
+        <div><label>PIN code</label><input id="pincode" inputmode="numeric" placeholder="from form submission"></div>
+      </div>
+      <div class="row c3" style="margin-top:10px">
+        <div><label>GSTIN</label><input id="custGstin" placeholder="optional"></div>
+        <div><label>Tax type</label>
+          <select id="taxMode"><option value="intra">CGST + SGST (same state)</option><option value="inter">IGST (other state)</option></select>
+        </div>
+        <div><label>&nbsp;</label><div id="taxBasis" class="hint" style="padding-top:8px">—</div></div>
+      </div>
+      <div class="flexrow" style="margin-top:10px">
+        <button id="zohoMatchBtn" class="ghost">🔗 Match in Zoho</button>
+        <span id="zohoMatchInfo" class="hint"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Quote details</h3>
+      <div class="row c3">
+        <div><label>Quote #</label><input id="quoteNumber"></div>
+        <div><label>Date</label><input id="quoteDate" type="date"></div>
+        <div><label>Valid until</label><input id="validUntil" type="date"></div>
+      </div>
+      <div class="row c2" style="margin-top:10px">
+        <div><label>Prepared by (POC) <span class="hint">— auto from contact owner</span></label><input id="pocName" list="pocList" placeholder="Auto from HubSpot contact owner"><datalist id="pocList"></datalist></div>
+        <div><label>Subject / Plan label</label><input id="subject" placeholder="e.g. DigiStay Yearly"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Build quotation
+        <span id="itemLoad" class="loading"></span>
+        <span class="spacer"></span>
+        <button id="rebuildBtn" class="ghost" style="padding:4px 9px;font-size:12px">↻ Rebuild from Zoho</button>
+      </h3>
+      <div id="catalogStatus" class="hint" style="margin-bottom:8px"></div>
+      <div id="wizard"></div>
+      <div style="margin-top:14px;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em">Selected items</div>
+      <div style="overflow-x:auto;margin-top:6px">
+      <table class="lines">
+        <thead><tr>
+          <th style="min-width:160px">Item</th>
+          <th class="num" style="width:96px">Rate ₹</th>
+          <th style="width:108px">Qty</th>
+          <th class="num" style="width:66px">GST %</th>
+          <th class="num" style="width:96px">Amount</th>
+          <th style="width:30px"></th>
+        </tr></thead>
+        <tbody id="linesBody"></tbody>
+      </table>
+      </div>
+      <p class="hint" style="margin-top:8px">Plans &amp; standard add-ons are capped at qty <b>2</b>. <b>Additional Room License</b> is auto-added from room count (rooms beyond the plan's included 15 / 20) at the plan's per-room rate — editable. Plan features appear on the final quote/PDF once added.</p>
+    </div>
+
+    <div class="card">
+      <h3>Discount <span class="spacer"></span><button id="hideDiscBtn" class="ghost" style="padding:3px 10px;font-size:12px">🙈 Hide</button></h3>
+      <div id="discBody">
+        <div><label>Zoho coupon / discount</label><select id="couponSelect"></select></div>
+        <div class="hint" style="margin-top:6px">Only discounts created in Zoho can be applied — no manual discounts.</div>
+      </div>
+      <div id="discHidden" class="hint" style="display:none">🙈 Discount hidden for screen-sharing — totals show net price only. <a href="#" id="showDiscLink">Show discount</a></div>
+    </div>
+
+    <div class="card">
+      <h3>Notes &amp; terms</h3>
+      <div><label>Notes to customer</label><textarea id="notes" rows="2" placeholder="e.g. Looking forward to your business."></textarea></div>
+      <div style="margin-top:10px"><label>Terms</label><textarea id="terms" rows="2"></textarea></div>
+      <details class="seller">
+        <summary>Seller / DigiStay details &amp; logo (saved for all quotes)</summary>
+        <div class="logobox">
+          <div id="logoPreview"></div>
+          <div><input type="file" id="logoFile" accept="image/*" style="font-size:12px;border:0;padding:0"><div class="hint">PNG/JPG/SVG — embedded &amp; saved locally.</div></div>
+          <button id="logoClear" class="ghost" style="font-size:12px;padding:4px 9px">Use wordmark</button>
+        </div>
+        <div class="row c2" style="margin-top:10px">
+          <div><label>Legal name</label><input id="sellerName"></div>
+          <div><label>GSTIN</label><input id="sellerGstin"></div>
+        </div>
+        <div class="row c3" style="margin-top:10px">
+          <div style="grid-column:span 2"><label>Address</label><input id="sellerAddress"></div>
+          <div><label>State</label><input id="sellerState"></div>
+        </div>
+        <div class="row c2" style="margin-top:10px">
+          <div><label>Email</label><input id="sellerEmail"></div>
+          <div><label>Phone</label><input id="sellerPhone"></div>
+        </div>
+        <button id="saveSellerBtn" class="ghost" style="margin-top:10px">Save seller details</button>
+      </details>
+    </div>
+  </div>
+
+  <!-- RIGHT: live preview -->
+  <div class="preview-wrap">
+    <div class="nonprint flexrow" style="margin-bottom:8px;justify-content:space-between">
+      <span class="hint">Live preview — this is what prints &amp; emails</span>
+      <span id="dirtyFlag" class="pill gray">saved</span>
+    </div>
+    <div class="nonprint flexrow" style="margin-bottom:8px;gap:10px;flex-wrap:wrap">
+      <span class="hint" style="font-weight:600">Zoho syncs on every Save.</span>
+      <label class="chk"><input type="checkbox" id="syncOnSave" checked> Also log a note to HubSpot</label>
+      <button id="syncNowBtn" class="ghost" style="padding:4px 10px;font-size:12px">⇪ Sync now</button>
+      <button id="payLinkBtn" class="ghost" style="padding:4px 10px;font-size:12px">💳 Payment link</button>
+      <button id="checkPayBtn" class="ghost" style="padding:4px 10px;font-size:12px">🔄 Check payment</button>
+      <span id="syncStatus" class="hint"></span>
+    </div>
+    <div id="quoteDoc"></div>
+  </div>
+</div>
+
+
+</div>
+<div id="view-dashboard" style="display:none">
+
+<div class="wrap">
+  <div class="topbar">
+    <h1><span class="dot"></span> DigiStay · POC Performance</h1>
+    <span class="spacer"></span>
+    <button id="dashRebuild" class="ghost" title="Re-scan quotation details from Zoho">↻ Refresh</button>
+  </div>
+
+  <div class="frow">
+    <span class="lbl">Period</span>
+    <div class="chips" id="periodChips">
+      <button class="chip" data-p="mtd">This month</button>
+      <button class="chip" data-p="lastmonth">Last month</button>
+      <button class="chip on" data-p="all">All time</button>
+    </div>
+    <span class="lbl">or dates</span>
+    <input type="date" id="fFrom" title="From date" aria-label="From date">
+    <span class="lbl">→</span>
+    <input type="date" id="fTo" title="To date" aria-label="To date">
+    <button class="chip" id="fApply">Apply</button>
+    <span class="lbl" style="margin-left:8px">Status</span>
+    <div class="chips" id="statusChips">
+      <button class="chip" data-s="all">All statuses</button>
+      <button class="chip" data-s="accepted">Accepted / Invoiced</button>
+      <button class="chip on" data-s="nondraft">Sent + Accepted</button>
+      <button class="chip" data-s="sent">Sent only</button>
+      <button class="chip" data-s="draft">Drafts only</button>
+    </div>
+    <span class="lbl" style="margin-left:8px">Trends</span>
+    <div class="chips" id="metricChips">
+      <button class="chip on" data-m="quoted">Quoted</button>
+      <button class="chip" data-m="accepted">Accepted</button>
+      <button class="chip" data-m="count">Count</button>
+    </div>
+  </div>
+  <div class="frow" id="pocFrow">
+    <span class="lbl">POCs</span>
+    <button class="chip" id="pocMine" style="display:none">★ My team (me)</button>
+    <div class="chips" id="pocChips"></div>
+    <button class="chip" id="pocClear" style="display:none">✕ Clear</button>
+    <span class="hint" id="pocHint" style="margin-left:4px"></span>
+  </div>
+  <div id="status">Loading…</div>
+
+  <h2>Summary <span id="sumScope" class="hint"></span></h2>
+  <div id="orgCards" class="cards"></div>
+
+  <h2>Trends</h2>
+  <div class="grid2">
+    <div class="panel"><div class="hint" style="margin-bottom:6px">Month-on-month <span id="momScope"></span></div><div class="chartbox"><canvas id="momChart"></canvas></div></div>
+    <div class="panel"><div class="hint" style="margin-bottom:6px">Year-on-year (by month)</div><div class="chartbox"><canvas id="yoyChart"></canvas></div></div>
+  </div>
+
+  <h2>Leaderboard</h2>
+  <div id="rankCards" class="rankcards"></div>
+
+  <h2>By POC</h2>
+  <div class="panel"><table id="pocTable"><thead></thead><tbody></tbody></table></div>
+  <div class="note" id="pocNote"></div>
+
+  <h2>Outstanding payments — invoiced, not realized <span id="dueScope" class="hint"></span></h2>
+  <div id="dueCards" class="cards"></div>
+  <div class="panel" style="margin-top:10px;overflow-x:auto"><table id="dueTable"><thead></thead><tbody></tbody></table></div>
+  <div class="note" id="dueNote"></div>
+
+  <div class="grid2">
+    <div><h2>Plans — best &amp; least selling</h2><div class="panel"><table id="planTable"><thead></thead><tbody></tbody></table></div></div>
+    <div><h2>Add-ons &amp; services — best &amp; least selling</h2><div class="panel"><table id="addonTable"><thead></thead><tbody></tbody></table></div></div>
+  </div>
+
+  <h2>Plans — Quarterly vs Yearly</h2>
+  <div id="termCards" class="cards"></div>
+  <div class="grid2" style="margin-top:10px">
+    <div><div class="hint" style="margin-bottom:6px">Quarterly plans — highest → lowest</div><div class="panel"><table id="termQTable"><thead></thead><tbody></tbody></table></div></div>
+    <div><div class="hint" style="margin-bottom:6px">Yearly plans — highest → lowest</div><div class="panel"><table id="termYTable"><thead></thead><tbody></tbody></table></div></div>
+  </div>
+
+  <h2>Average order value by item</h2>
+  <div class="panel"><table id="aovTable"><thead></thead><tbody></tbody></table></div>
+
+  <div class="note" id="caveat"></div>
+</div>
+
+
+</div>
+<script>
+
+(function(){
+"use strict";
+const ZOHO='mcp__902e601b-7e82-446d-8ccc-4b7ce715944b';
+const HUBSPOT='mcp__ebbfa203-0d0b-44fa-aae0-a87358d0fb66';
+const GMAIL='mcp__58de8fc0-38b2-41af-9a9e-e79d80500208';
+const ORG='60062278723';
+const DB_KEY='digistay_quotes_v1';
+const SELLER_KEY='digistay_seller_v2';
+const CAT_KEY='digistay_catalog_v9';
+const POC_KEY='digistay_lastpoc';
+const USER_KEY='digistay_user_v1';
+const SCAN_CAP=500;
+// Books items hidden from the catalog (obsolete/placeholder). Matched by id, with name fallback.
+const EXCLUDE_ITEM_IDS=['3296275000000249015','3296275000001314166','3296275000002501738'];
+const EXCLUDE_ITEM_NAMES=['current plan','website','quaterly plan services','quarterly plan services'];
+function bookExcluded(it){return EXCLUDE_ITEM_IDS.indexOf(it.item_id)>=0||EXCLUDE_ITEM_NAMES.indexOf(String(it.name||'').trim().toLowerCase())>=0;}
+const $=id=>document.getElementById(id);
+
+const SELLER_DEFAULT={name:'Openquest Tech Private Limited',gstin:'05AAECO5584C1ZJ',
+  address:'571, Lakhi Bagh, Dehradun, Uttarakhand 248001, India',state:'Uttarakhand',
+  email:'abhinav@digistay.ai',phone:'6397009762',brand:'DigiStay',logo:''};
+
+const WORDMARK='<div style="display:flex;align-items:center;gap:9px"><span style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#0f766e,#4f46e5);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px">D</span><span style="font-size:24px;font-weight:800;color:#0f766e;letter-spacing:-.01em">Digi<span style="color:#4f46e5">Stay</span></span></div>';
+
+let STATE={items:[],itemsById:{},catalog:{plans:[],addons:[],coupons:[],pocs:[],builtAt:0},
+  booksCatalog:[],seller:Object.assign({},SELLER_DEFAULT),db:{quotes:[],seq:0},cur:null,dirty:false,
+  step:1,path:'',tab:'addon',planTermFilter:'all',ownerCache:{},user:null,_appStarted:false};
+
+/* ---------- utils ---------- */
+const fmtINR=n=>'₹'+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const todayISO=()=>new Date().toISOString().slice(0,10);
+function addDays(iso,d){const t=new Date(iso);t.setDate(t.getDate()+d);return t.toISOString().slice(0,10);}
+function uid(){return 'q'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function normState(s){return String(s||'').toLowerCase().replace(/[^a-z]/g,'');}
+function featList(desc){return String(desc||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);}
+function firstVal(){for(var i=0;i<arguments.length;i++){var v=(arguments[i]==null?'':arguments[i]).toString().trim();if(v&&!/^(na|n\/?a|nil|none|null|-|\.)$/i.test(v))return v;}return '';}
+
+// Best-effort Indian PIN -> state. Precise for Uttarakhand (seller); UK/UP border prefixes return blank (ask to confirm).
+function inferStateFromPin(pin){
+  const s=String(pin||'').replace(/\D/g,'');
+  if(s.length<3)return {state:'',confident:false};
+  const p2=+s.slice(0,2),p3=+s.slice(0,3);
+  if(p3===248||p3===249||p3===263)return {state:'Uttarakhand',confident:true};
+  if(p3===244||p3===246||p3===247||p3===262)return {state:'',confident:false}; // UK/UP border — confirm manually
+  const m={11:'Delhi',12:'Haryana',13:'Haryana',14:'Punjab',15:'Punjab',16:'Punjab',17:'Himachal Pradesh',18:'Jammu & Kashmir',19:'Jammu & Kashmir',
+   20:'Uttar Pradesh',21:'Uttar Pradesh',22:'Uttar Pradesh',23:'Uttar Pradesh',24:'Uttar Pradesh',25:'Uttar Pradesh',26:'Uttar Pradesh',27:'Uttar Pradesh',28:'Uttar Pradesh',
+   30:'Rajasthan',31:'Rajasthan',32:'Rajasthan',33:'Rajasthan',34:'Rajasthan',36:'Gujarat',37:'Gujarat',38:'Gujarat',39:'Gujarat',
+   40:'Maharashtra',41:'Maharashtra',42:'Maharashtra',43:'Maharashtra',44:'Maharashtra',45:'Madhya Pradesh',46:'Madhya Pradesh',47:'Madhya Pradesh',48:'Madhya Pradesh',49:'Chhattisgarh',
+   50:'Telangana',51:'Andhra Pradesh',52:'Andhra Pradesh',53:'Andhra Pradesh',56:'Karnataka',57:'Karnataka',58:'Karnataka',59:'Karnataka',
+   60:'Tamil Nadu',61:'Tamil Nadu',62:'Tamil Nadu',63:'Tamil Nadu',64:'Tamil Nadu',67:'Kerala',68:'Kerala',69:'Kerala',
+   70:'West Bengal',71:'West Bengal',72:'West Bengal',73:'West Bengal',74:'West Bengal',75:'Odisha',76:'Odisha',77:'Odisha',78:'Assam',
+   80:'Bihar',81:'Bihar',82:'Bihar',83:'Jharkhand',84:'Bihar',85:'Bihar'};
+  const st=m[p2]||'';
+  return {state:st,confident:!!st};
+}
+function resolveTax(){
+  const q=STATE.cur,c=q.customer,seller=normState(STATE.seller.state);
+  if(c.state){q.taxMode=(normState(c.state)===seller)?'intra':'inter';}
+  else if(c.pincode){const inf=inferStateFromPin(c.pincode);
+    if(inf.state){c.state=inf.state;if($('custState'))$('custState').value=inf.state;q._pinState=true;q.taxMode=(normState(inf.state)===seller)?'intra':'inter';}}
+  if($('taxMode'))$('taxMode').value=q.taxMode;
+  render();
+}
+function updateTaxBasis(){
+  const el=$('taxBasis');if(!el)return;const q=STATE.cur,c=q.customer,intra=q.taxMode==='intra';let t,amber=false;
+  if(c.state){t=(q._pinState?('From PIN '+(c.pincode||'')+' → '+c.state+' — confirm'):('Auto from state: '+c.state))+' → '+(intra?'CGST + SGST':'IGST');amber=!!q._pinState;}
+  else if(c.pincode){t='PIN '+c.pincode+' — state not confirmed; pick tax type';amber=true;}
+  else{t='No state/PIN from HubSpot — pick tax type manually';amber=true;}
+  el.textContent=t;el.style.color=amber?'var(--warn)':'var(--muted)';
+}
+
+async function call(name,args){
+  const r=await window.cowork.callMcpTool(name,args);
+  if(r&&r.isError){const t=(r.content&&r.content[0]&&r.content[0].text)||'Tool error';throw new Error(t);}
+  let obj=r?r.structuredContent:null;
+  if(obj==null&&r&&r.content&&r.content[0]&&typeof r.content[0].text==='string'){
+    try{obj=JSON.parse(r.content[0].text);}catch(e){obj=r.content[0].text;}
+  }
+  return obj;
+}
+
+/* ---------- persistence ---------- */
+function loadDB(){try{const r=localStorage.getItem(DB_KEY);if(r)STATE.db=JSON.parse(r);}catch(e){}
+  if(!STATE.db||!Array.isArray(STATE.db.quotes))STATE.db={quotes:[],seq:0};}
+function saveDB(){localStorage.setItem(DB_KEY,JSON.stringify(STATE.db));}
+function loadSeller(){try{const r=localStorage.getItem(SELLER_KEY);if(r)STATE.seller=Object.assign({},SELLER_DEFAULT,JSON.parse(r));}catch(e){}}
+function saveSeller(){
+  STATE.seller=Object.assign({},STATE.seller,{name:$('sellerName').value,gstin:$('sellerGstin').value,address:$('sellerAddress').value,
+    state:$('sellerState').value,email:$('sellerEmail').value,phone:$('sellerPhone').value,brand:'DigiStay'});
+  localStorage.setItem(SELLER_KEY,JSON.stringify(STATE.seller));
+  flash('Seller details saved.');render();renderLogoPreview();
+}
+function loadCat(){try{const r=localStorage.getItem(CAT_KEY);if(r)return JSON.parse(r);}catch(e){}return null;}
+function saveCat(c){try{localStorage.setItem(CAT_KEY,JSON.stringify(c));}catch(e){}}
+
+/* ---------- room parsing ---------- */
+function parseRooms(p){
+  const cands=[p.digistay_room_count,p.number_of_rooms,p.number_of_rooms_in_your_hotel,p.number_of_rooms_in_hotel,p.number_of_rooms_hotel,p.property_rooms];
+  for(const c of cands){
+    if(c==null||c==='')continue;
+    const s=String(c).toLowerCase();
+    const m=s.match(/\d+/g);
+    if(s.includes('less'))return m?parseInt(m[0],10):'';
+    if(m){if(m.length>=2)return Math.round((parseInt(m[0],10)+parseInt(m[1],10))/2);return parseInt(m[0],10);}
+  }
+  return '';
+}
+
+/* ---------- quote model ---------- */
+function blankQuote(){
+  return {id:uid(),number:'',saved:false,date:todayISO(),validUntil:addDays(todayISO(),15),
+    poc:(localStorage.getItem(POC_KEY)||'abhinav'),subject:'',
+    zohoEstimateId:'',zohoEstimateNumber:'',zohoEstimateUrl:'',zohoCustomerId:'',hubspotNoteId:'',zohoStatus:'',zohoEmailed:false,zohoSendError:'',paid:false,paymentId:'',paidAt:'',paidAmount:0,
+    customer:{name:'',email:'',phone:'',address:'',city:'',state:'',pincode:'',gstin:'',roomCount:'',propertyName:'',hubspotId:'',zohoId:'',zohoContactPersonId:'',ownerId:''},
+    taxMode:'intra',lines:[],coupon:null,overallDiscType:'pct',overallDiscValue:0,
+    notes:'Looking forward to your business.',terms:'50% advance to confirm onboarding. Prices valid for 15 days. GST as applicable.'};
+}
+function nextNumber(){STATE.db.seq=(STATE.db.seq||0)+1;return 'DGSTAY-QT-'+String(STATE.db.seq).padStart(4,'0');}
+
+/* ---------- live Books items ---------- */
+async function fetchItems(){
+  $('itemLoad').textContent='loading live items…';
+  try{
+    const obj=await call(ZOHO+'__list_items',{query_params:{organization_id:ORG,per_page:200,filter_by:'Status.Active'}});
+    const items=(obj&&obj.data&&obj.data.items)||(obj&&obj.items)||[];
+    STATE.items=items;STATE.itemsById={};items.forEach(it=>{STATE.itemsById[it.item_id]=it;});
+    STATE.booksCatalog=items.filter(it=>!bookExcluded(it));
+    $('itemLoad').textContent='';renderWizard();checkPriceDrift();
+  }catch(e){$('itemLoad').textContent='⚠ '+e.message;}
+}
+function bookGst(it){const prefs=(it&&it.item_tax_preferences)||[];const intra=prefs.find(p=>p.tax_specification==='intra');const any=intra||prefs[0];const v=any?Number(any.tax_percentage):NaN;return isFinite(v)?v:18;}
+
+/* ---------- AI Hotel Manager catalog (harvested from estimates) ---------- */
+function catStatus(msg,busy){const el=$('catalogStatus');el.textContent=msg||'';el.style.color=busy?'var(--brand)':'var(--muted)';}
+async function buildCatalog(force){
+  if(!force){const c=loadCat();if(c&&c.builtAt&&(Date.now()-c.builtAt<7*864e5)){STATE.catalog=c;sortCatalogPlans(STATE.catalog);renderWizard();renderPocList();renderCoupons();catStatus('Catalog: '+c.plans.length+' plans · '+c.addons.length+' add-ons · '+c.coupons.length+' coupons (cached '+new Date(c.builtAt).toLocaleDateString()+')',false);return c;}}
+  STATE._catBusy=true;$('rebuildBtn').disabled=true;catStatus('Loading estimates…',true);
+  let ests=[];
+  try{let page=1;while(ests.length<SCAN_CAP){
+      const le=await call(ZOHO+'__list_estimates',{query_params:{organization_id:ORG,per_page:100,page:page,sort_column:'created_time'}});
+      const arr=(le&&le.data&&le.data.estimates)||(le&&le.estimates)||[];
+      ests=ests.concat(arr);
+      const pc=(le&&le.data&&le.data.page_context)||(le&&le.page_context)||{};
+      catStatus('Loading estimates… '+ests.length,true);
+      if(!arr.length||pc.has_more_page===false||arr.length<100||page>=8)break;
+      page++;
+    }}
+  catch(e){catStatus('⚠ Could not load estimates: '+e.message,false);$('rebuildBtn').disabled=false;STATE._catBusy=false;return STATE.catalog;}
+  const pocs={};ests.forEach(e=>{if(e.salesperson_name)pocs[e.salesperson_name]=1;});
+  const plans={},addons={},coupons={};
+  const ids=ests.slice(0,SCAN_CAP).map(e=>e.estimate_id);
+  let done=0;const total=ids.length,B=10;
+  for(let i=0;i<ids.length;i+=B){
+    await Promise.all(ids.slice(i,i+B).map(async id=>{
+      try{
+        const ge=await call(ZOHO+'__get_estimate',{path_variables:{estimate_id:id},query_params:{organization_id:ORG}});
+        const est=(ge&&ge.data&&ge.data.estimate)||(ge&&ge.estimate);if(!est)return;
+        const ct=est.created_time||'';
+        (est.line_items||[]).forEach(li=>{
+          const tnum=Number(li.type);if(tnum!==1&&tnum!==2)return; // only true plans(1)/add-ons(2); skip custom/untyped lines
+          const isAdd=tnum===2;const b=isAdd?addons:plans;
+          const key=li.item_id||('n:'+(li.name||''));
+          const rate=Number(li.rate)||0,gst=Number(li.tax_percentage)||18;
+          if(!b[key])b[key]={item_id:li.item_id||'',name:li.name||'Item',rate:rate,desc:li.description||'',gst:gst,unit:li.interval_unit||li.unit||'',type:isAdd?2:1,_t:ct};
+          else if(ct>(b[key]._t||'')){b[key].rate=rate;b[key]._t=ct;if((li.description||'').length>(b[key].desc||'').length)b[key].desc=li.description;}
+        });
+        if(est.coupon&&est.coupon.coupon_code){const cc=est.coupon.coupon_code;
+          if(!coupons[cc])coupons[cc]={code:cc,name:est.coupon.coupon_name||cc,percent:Number(est.discount_percent)||0,amount:Number(est.coupon.discount_amount)||0};}
+      }catch(e){}
+      done++;catStatus('Building AI Hotel Manager catalog… '+done+'/'+total,true);
+    }));
+  }
+  CURATED_CATALOG.forEach(it=>{const rec={item_id:it.id,name:it.name,rate:Number(it.rate)||0,desc:it.desc||'',gst:18,unit:it.unit||''};if(it.type===1)plans[it.id]=rec;else addons[it.id]=rec;});
+  await discoverExtras(plans,addons);
+  const clean=o=>{const v=Object.values(o);v.forEach(x=>delete x._t);return v;};
+  const dedup=arr=>{const seen={},out=[];arr.forEach(x=>{const k=normName(x.name);if(!k||seen[k])return;seen[k]=1;out.push(x);});return out;};
+  const cat={plans:dedup(clean(plans)),addons:dedup(clean(addons)),
+    coupons:Object.values(coupons),pocs:Object.keys(pocs),builtAt:Date.now()};
+  STATE.catalog=cat;sortCatalogPlans(STATE.catalog);saveCat(cat);
+  renderWizard();renderPocList();renderCoupons();
+  catStatus('Catalog ready · '+cat.plans.length+' plans · '+cat.addons.length+' add-ons · '+cat.coupons.length+' coupons (scanned '+total+' estimates)',false);
+  $('rebuildBtn').disabled=false;STATE._catBusy=false;
+  return cat;
+}
+// Lightweight always-on sync: refresh live items + merge the most recent estimates into the cached catalog
+// so new plans / add-ons / invoiced items created in Zoho show up automatically (without a full rescan).
+async function refreshCatalogLive(){
+  if(STATE._catBusy||STATE.syncing)return;
+  STATE._catBusy=true;
+  try{
+    await fetchItems();
+    const base=STATE.catalog||{plans:[],addons:[],coupons:[],pocs:[]};
+    const keyOf=x=>x.item_id||('n:'+(x.name||''));
+    const plans={},addons={},coupons={},pocset={};
+    (base.plans||[]).forEach(p=>{plans[keyOf(p)]=Object.assign({},p);});
+    (base.addons||[]).forEach(a=>{addons[keyOf(a)]=Object.assign({},a);});
+    (base.coupons||[]).forEach(c=>{if(c&&c.code)coupons[c.code]=c;});
+    (base.pocs||[]).forEach(n=>{if(n)pocset[n]=1;});
+    const le=await call(ZOHO+'__list_estimates',{query_params:{organization_id:ORG,per_page:25,page:1,sort_column:'created_time'}});
+    const arr=(le&&le.data&&le.data.estimates)||(le&&le.estimates)||[];
+    arr.forEach(e=>{if(e.salesperson_name)pocset[e.salesperson_name]=1;});
+    const ids=arr.map(e=>e.estimate_id);
+    for(let i=0;i<ids.length;i+=10){
+      await Promise.all(ids.slice(i,i+10).map(async id=>{
+        try{const ge=await call(ZOHO+'__get_estimate',{path_variables:{estimate_id:id},query_params:{organization_id:ORG}});
+          const est=(ge&&ge.data&&ge.data.estimate)||(ge&&ge.estimate);if(!est)return;
+          (est.line_items||[]).forEach(li=>{const tnum=Number(li.type);if(tnum!==1&&tnum!==2)return;const isAdd=tnum===2;const b=isAdd?addons:plans;
+            const key=li.item_id||('n:'+(li.name||''));
+            if(!b[key])b[key]={item_id:li.item_id||'',name:li.name||'Item',rate:Number(li.rate)||0,desc:li.description||'',gst:Number(li.tax_percentage)||18,unit:li.interval_unit||li.unit||'',type:isAdd?2:1};});
+          if(est.coupon&&est.coupon.coupon_code){const cc=est.coupon.coupon_code;if(!coupons[cc])coupons[cc]={code:cc,name:est.coupon.coupon_name||cc,percent:Number(est.discount_percent)||0,amount:Number(est.coupon.discount_amount)||0};}
+        }catch(e){}
+      }));
+    }
+    CURATED_CATALOG.forEach(it=>{const rec={item_id:it.id,name:it.name,rate:Number(it.rate)||0,desc:it.desc||'',gst:18,unit:it.unit||''};if(it.type===1)plans[it.id]=rec;else addons[it.id]=rec;});
+    const dedup=a=>{const seen={},out=[];a.forEach(x=>{const k=normName(x.name);if(!k||seen[k])return;seen[k]=1;out.push(x);});return out;};
+    const cat={plans:dedup(Object.values(plans)),addons:dedup(Object.values(addons)),coupons:Object.values(coupons),pocs:Object.keys(pocset),builtAt:Date.now()};
+    STATE.catalog=cat;sortCatalogPlans(cat);saveCat(cat);
+    renderWizard();renderPocList();renderCoupons();
+    catStatus('Auto-synced with Zoho · '+cat.plans.length+' plans · '+cat.addons.length+' add-ons · '+cat.coupons.length+' coupons · '+new Date().toLocaleTimeString(),false);
+  }catch(e){}
+  STATE._catBusy=false;
+}
+
+function hasPlan(){return STATE.cur.lines.some(l=>l.kind==='plan');}
+function isRoomLicense(name){return /additional\s*room\s*license/i.test(String(name||''));}
+function unitPeriod(u){u=String(u||'').toLowerCase();if(u.indexOf('year')>=0)return 'year';if(u.indexOf('quarter')>=0||u.indexOf('quater')>=0)return 'quarter';if(u.indexOf('month')>=0)return 'month';return '';}
+function periodOf(name,unit){const s=String(name||'').toLowerCase();if(/year|annual/.test(s))return 'year';if(/quarter|quater/.test(s))return 'quarter';if(/month/.test(s))return 'month';return unitPeriod(unit);}
+function lineFrom(e,kind){return {itemId:e.itemId||e.item_id||'',name:e.name,desc:e.desc||'',rate:Number(e.rate)||0,qty:1,perRoom:false,discountPct:0,gst:Number(e.gst)||18,unit:e.unit||'',kind:kind,_open:false};}
+// Plan tiers: rooms included (Max=20, others=15) and per-extra-room license price by term.
+const BASE_ROOMS={starter:15,connect:15,advance:15,max:20,booster:20};
+const ROOM_ADDON_PRICE={quarter:{starter:200,connect:300,advance:400,max:600,booster:900},year:{starter:600,connect:900,advance:1200,max:2000,booster:2700}};
+function planTier(name){const s=String(name||'').toLowerCase();if(s.indexOf('booster')>=0)return 'booster';if(s.indexOf('max')>=0)return 'max';if(s.indexOf('advance')>=0)return 'advance';if(s.indexOf('connect')>=0)return 'connect';if(s.indexOf('starter')>=0)return 'starter';return '';}
+function planBaseRooms(name){return BASE_ROOMS[planTier(name)]||15;}
+function roomAddonPrice(name,term){const tm=(term==='year')?'year':'quarter';const t=planTier(name);return (ROOM_ADDON_PRICE[tm]&&ROOM_ADDON_PRICE[tm][t])||0;}
+// Display order: Quarter group first, then Year; within a term Starter→Connect→Connect Advance→Max→Revenue Booster.
+function planOrderKey(p){const term=periodOf(p.name,p.unit);const tr=(term==='quarter')?0:(term==='year'?1:2);const rk={starter:1,connect:2,advance:3,max:4,booster:5}[planTier(p.name)]||9;return [tr,rk];}
+function sortCatalogPlans(cat){if(cat&&cat.plans)cat.plans.sort((a,b)=>{const ka=planOrderKey(a),kb=planOrderKey(b);if(ka[0]!==kb[0])return ka[0]-kb[0];if(ka[1]!==kb[1])return ka[1]-kb[1];return (Number(a.rate)||0)-(Number(b.rate)||0);});}
+// Named catalog items to ensure present (discovered from estimates by exact name if not in the recent scan).
+const KNOWN_EXTRA_ADDONS=["Co Branded QR Kit","Essential Reach Optimization","Optimization Listing On single Ota","Essential Reach with Google Listing","Fresh Listing On single Ota","Bundle of 12 ota With Google listing","Bundle of 5 ota With Google listing","RMS Quarter","RMS Yearly","Standard QR Kit","Bundle of 12 ota","Bundle of 5 ota","Essential Reach"];
+const KNOWN_EXTRA_PLANS=["Revenue Booster (ARR 1500-5000) Quarter","Revenue Booster (ARR 1500-5000) Yearly","Revenue Booster (ARR Above 5000) Quarter","Revenue Booster (ARR Above 5000) Yearly","Revenue Booster (ARR Below 1500) Quarter","Revenue Booster (ARR Below 1500) Yearly"];
+// Add-ons already bundled inside a plan tier — locked (cannot be added) for that tier.
+const TIER_INCLUDED={advance:['rms','form c'],max:['rms','form c','restaurant billing','in room dining','inventory'],booster:['rms','form c','restaurant billing','in room dining','inventory']};
+function isBundled(addonName,planName){const kws=TIER_INCLUDED[planTier(planName)]||[];const n=String(addonName||'').toLowerCase().replace(/-/g,' ');return kws.some(k=>n.indexOf(k)>=0);}
+// Authoritative catalog captured from reference quotes DGSTAY-QT-20260941/966-970 (exact Zoho item ids & prices).
+const RB_DESC='Dedicated Relationship Manager\nDedicated Revenue Manager\nUp to 20 Rooms\nCheck-in/Check-out\nSmart Check-in (Self & web check-in)\nBilling & Invoicing\nLedger\nReports\nWhatsApp Communication\nBooking Engine (4% transaction charge)\nCalendar/Reservation System\nPartner App\nDigi AI\nBusiness Intelligence Dashboard\nGuest Folio Management\nChannel Manager (Supported OTA)\nGoogle Hotel ARI Integration\nRevenue Management System (RMS Tool)\nFORM C\nRestaurant Billing\nIn Room Dining\nInventory Pro (Recipe)\nStandard QR Kit (20)\nGoogle Direct Booking (10% charge)\nPricing Strategy\nOTA Optimization';
+const CURATED_CATALOG=[
+ {id:'3296275000002543616',type:1,name:'DigiStay Max Yearly',rate:42999,unit:'years',desc:'Dedicated Relationship Manager\nUp to 20 Rooms\nCheck-in/Check-out\nSmart Check-in\nBilling & Invoicing\nLedger\nReports\nWhatsApp Communication\nBooking Engine\nCalendar/Reservation System\nPartner App\nDigi AI\nBusiness Intelligence Dashboard\nGuest Folio Management\nChannel Manager (Supported OTA)\nGoogle Hotel ARI Integration\nRevenue Management System (RMS Tool)\nFORM C\nRestaurant Billing\nIn Room Dining\nInventory Pro (Recipe)\nStandard QR Kit (20)\nGoogle Direct Booking'},
+ {id:'3296275000001502687',type:1,name:'DigiStay Connect Yearly',rate:22999,unit:'years',desc:'Dedicated Relationship Manager\nUp to 15 Rooms\nCheck-in/Check-out\nSmart Check-in\nBilling & Invoicing\nLedger\nReports\nWhatsApp Communication\nBooking Engine\nCalendar/Reservation System\nPartner App\nDigi AI\nBusiness Intelligence Dashboard\nGuest Folio Management\nChannel Manager (Supported OTA)'},
+ {id:'3296275000001470597',type:1,name:'Revenue Booster (ARR 1500-5000) Yearly',rate:126000,unit:'years',desc:'Dedicated Relationship Manager\nDedicated Revenue Manager\nUp to 20 Rooms\nCheck-in/Check-out\nSmart Check-in (Self & web check-in)\nBilling & Invoicing\nLedger\nReports\nWhatsApp Communication\nBooking Engine (4% transaction charge)\nCalendar/Reservation System\nPartner App\nDigi AI\nBusiness Intelligence Dashboard\nGuest Folio Management\nChannel Manager (Supported OTA)\nGoogle Hotel ARI Integration\nRevenue Management System (RMS Tool)\nFORM C\nRestaurant Billing\nIn Room Dining\nInventory Pro (Recipe)\nStandard QR Kit (20)\nGoogle Direct Booking (10% charge)\nPricing Strategy\nOTA Optimization'},
+ {id:'3296275000001470584',type:1,name:'Revenue Booster (ARR Below 1500) Quarter',rate:25000,unit:'months',desc:RB_DESC},
+ {id:'3296275000001470637',type:1,name:'Revenue Booster (ARR Below 1500) Yearly',rate:76000,unit:'years',desc:RB_DESC},
+ {id:'3296275000001470610',type:1,name:'Revenue Booster (ARR 1500-5000) Quarter',rate:37500,unit:'months',desc:RB_DESC},
+ {id:'3296275000001470650',type:1,name:'Revenue Booster (ARR Above 5000) Quarter',rate:44000,unit:'months',desc:RB_DESC},
+ {id:'3296275000001470663',type:1,name:'Revenue Booster (ARR Above 5000) Yearly',rate:149000,unit:'years',desc:RB_DESC},
+ {id:'3296275000001875549',type:2,name:'Essential Reach Optimization',rate:2499,desc:'Optimization on GO-MMT/Airbnb, Booking.com & Agoda.'},
+ {id:'3296275000001543108',type:2,name:'Co Branded QR Kit',rate:300,desc:''},
+ {id:'3296275000002545702',type:2,name:'Optimization Listing On single Ota',rate:1500,desc:'Get listed on a single OTA'},
+ {id:'3296275000001855207',type:2,name:'Essential Reach with Google Listing',rate:6999,desc:'Get listed on GO-MMT/Airbnb, Booking.com & Agoda + Google listing.'},
+ {id:'3296275000002133451',type:2,name:'Fresh Listing On single Ota',rate:2000,desc:'Get listed on a single OTA'},
+ {id:'3296275000002048679',type:2,name:'Bundle of 12 ota With Google listing',rate:16999,desc:'GO-MMT, Airbnb, Booking.com, Agoda, Expedia, Cleartrip, Yatra, Easemytrip, Trip.com, Emerging Travel Group, Ixigo + any other supported OTA + Google listing'},
+ {id:'3296275000001749811',type:2,name:'Bundle of 5 ota With Google listing',rate:10999,desc:'GO-MMT, Airbnb, Booking.com, Agoda & Expedia + Google listing'},
+ {id:'3296275000002048692',type:2,name:'Google listing',rate:3500,desc:'Get listed on Google My Business'},
+ {id:'3296275000001543121',type:2,name:'RMS Quarter',rate:3000,desc:'Revenue Management System (quarterly)'},
+ {id:'3296275000001470726',type:2,name:'RMS Yearly',rate:12000,desc:'Revenue Management System (yearly)'},
+ {id:'3296275000001502955',type:2,name:'Inventory Pro (Receipe) Quarter',rate:900,desc:'Inventory & recipe management (quarterly)'},
+ {id:'3296275000001502974',type:2,name:'Inventory Pro (Receipe) Yearly',rate:3600,desc:'Inventory & recipe management (yearly)'},
+ {id:'3296275000001543095',type:2,name:'Standard QR Kit',rate:200,desc:''},
+ {id:'3296275000001754069',type:2,name:'Website',rate:10000,desc:'Custom website'},
+ {id:'3296275000001502898',type:2,name:'Additional Room License for Year',rate:2700,desc:''},
+ {id:'3296275000001502883',type:2,name:'Additional Room License for Quarter',rate:900,desc:''},
+ {id:'3296275000003542001',type:2,name:'Bundle of 12 ota',rate:14999,desc:'GO-MMT, Airbnb, Booking.com, Agoda, Expedia, Cleartrip, Yatra, Easemytrip, Trip.com, Emerging Travel Group, Ixigo + any other supported OTA'},
+ {id:'3296275000001470820',type:2,name:'Essential Reach',rate:4999,desc:'Get listed on GO-MMT/Airbnb, Booking.com & Agoda.'},
+ {id:'3296275000001470833',type:2,name:'Bundle of 5 ota',rate:8999,desc:'GO-MMT, Airbnb, Booking.com, Agoda & Expedia.'}
+];
+async function discoverExtras(plans,addons){
+  const have={};
+  Object.keys(plans).forEach(k=>have[String(plans[k].name||'').toLowerCase().trim()]=1);
+  Object.keys(addons).forEach(k=>have[String(addons[k].name||'').toLowerCase().trim()]=1);
+  const targets=KNOWN_EXTRA_PLANS.map(n=>({n:n,kind:'plan'})).concat(KNOWN_EXTRA_ADDONS.map(n=>({n:n,kind:'addon'})));
+  for(const t of targets){
+    if(have[t.n.toLowerCase().trim()])continue;
+    catStatus('Fetching catalog item: '+t.n+'…',true);
+    try{
+      const le=await call(ZOHO+'__list_estimates',{query_params:{organization_id:ORG,item_name:t.n,per_page:1,sort_column:'created_time'}});
+      const arr=(le&&le.data&&le.data.estimates)||(le&&le.estimates)||[];
+      if(!arr.length)continue;
+      const ge=await call(ZOHO+'__get_estimate',{path_variables:{estimate_id:arr[0].estimate_id},query_params:{organization_id:ORG}});
+      const est=(ge&&ge.data&&ge.data.estimate)||(ge&&ge.estimate);if(!est)continue;
+      const tn=t.n.toLowerCase().trim();
+      const li=(est.line_items||[]).find(x=>String(x.name||'').toLowerCase().trim()===tn);
+      if(!li)continue;
+      const lt=Number(li.type);const isAdd=lt===2?true:(lt===1?false:(t.kind==='addon'));
+      const rec={item_id:li.item_id||('x:'+t.n),name:li.name,rate:Number(li.rate)||0,desc:li.description||'',gst:Number(li.tax_percentage)||18,unit:li.interval_unit||''};
+      if(isAdd)addons[rec.item_id]=rec;else plans[rec.item_id]=rec;
+      have[rec.name.toLowerCase().trim()]=1;
+    }catch(e){}
+  }
+}
+function syncRoomLicense(){
+  const q=STATE.cur;const plan=q.lines.find(l=>l.kind==='plan');
+  q.lines=q.lines.filter(l=>!(l.kind==='addon'&&(l.autoRoom||isRoomLicense(l.name))));
+  if(!plan)return;
+  const term=periodOf(plan.name,plan.unit);if(term!=='quarter'&&term!=='year')return;
+  const base=planBaseRooms(plan.name),rooms=Number(q.customer.roomCount)||0,extra=Math.max(0,rooms-base);
+  const price=roomAddonPrice(plan.name,term);
+  if(extra<=0||price<=0)return;
+  const idx=q.lines.indexOf(plan);
+  q.lines.splice(idx+1,0,{itemId:'',name:'Additional Room License for '+(term==='year'?'Year':'Quarter'),desc:'',rate:price,qty:extra,perRoom:false,discountPct:0,gst:Number(plan.gst)||18,unit:(term==='year'?'years':'months'),kind:'addon',autoRoom:true,_open:false});
+}
+function computeStep(){const q=STATE.cur;
+  if(q.lines.some(l=>l.kind==='plan')){STATE.step=2;STATE.path='plan';STATE.tab='addon';}
+  else if(q.lines.length){STATE.step=2;STATE.path=q.lines.some(l=>l.kind==='addon')?'addonsOnly':'servicesOnly';STATE.tab=q.lines.some(l=>l.kind==='addon')?'addon':'service';}
+  else{STATE.step=1;STATE.path='';STATE.tab='addon';}}
+function addPlan(i){const e=STATE.catalog.plans[i];if(!e)return;
+  STATE.cur.lines=STATE.cur.lines.filter(l=>l.kind!=='plan');
+  STATE.cur.lines.unshift(lineFrom(e,'plan'));
+  const pp=periodOf(e.name,e.unit);
+  let removed=0;
+  if(pp)STATE.cur.lines=STATE.cur.lines.filter(l=>{if(l.kind!=='addon')return true;const ap=periodOf(l.name,l.unit);if(ap&&ap!==pp){removed++;return false;}return true;});
+  STATE.cur.lines=STATE.cur.lines.filter(l=>{if(l.kind!=='addon')return true;if(isBundled(l.name,e.name)){removed++;return false;}return true;});
+  syncRoomLicense();
+  const rl=STATE.cur.lines.find(l=>l.autoRoom);
+  STATE.path='plan';STATE.tab='addon';markDirty();renderWizard();renderLines();render();
+  flash('Plan selected: '+e.name+(rl?(' · '+rl.qty+' extra room license(s) @ '+fmtINR(rl.rate)):'')+(removed?(' · removed '+removed+' mismatched add-on(s)'):'')+' — Continue to add-ons.');}
+function addAddon(i){const e=STATE.catalog.addons[i];if(!e)return;
+  const plan=STATE.cur.lines.find(l=>l.kind==='plan');
+  if(plan&&isBundled(e.name,plan.name)){flash(e.name+' is already included in the '+(planTier(plan.name)||'')+' plan.',true);return;}
+  if(isRoomLicense(e.name)&&!hasPlan()){flash('Select a plan first — room-license add-ons require a plan.',true);return;}
+  if(STATE.cur.lines.some(l=>l.kind==='addon'&&((e.item_id&&l.itemId===e.item_id)||normName(l.name)===normName(e.name)))){flash(e.name+' already added — set the quantity in the table below.');renderCatBlocks();return;}
+  STATE.cur.lines.push(lineFrom(e,'addon'));markDirty();renderLines();render();renderCatBlocks();}
+function addService(i){const it=STATE.booksCatalog[i];if(!it)return;
+  if(STATE.cur.lines.some(l=>l.kind==='book'&&((it.item_id&&l.itemId===it.item_id)||normName(l.name)===normName(it.name)))){flash(it.name+' already added — set the quantity in the table below.');renderCatBlocks();return;}
+  STATE.cur.lines.push({itemId:it.item_id,name:it.name,desc:it.description||'',rate:Number(it.rate)||0,qty:1,perRoom:false,discountPct:0,gst:bookGst(it),kind:'book',_open:false});markDirty();renderLines();render();renderCatBlocks();}
+function removePlan(){STATE.cur.lines=STATE.cur.lines.filter(l=>l.kind!=='plan');syncRoomLicense();markDirty();renderWizard();renderLines();render();flash('Plan removed.');}
+function removeAddon(i){const e=STATE.catalog.addons[i];if(!e)return;STATE.cur.lines=STATE.cur.lines.filter(l=>!(l.kind==='addon'&&((e.item_id&&l.itemId===e.item_id)||normName(l.name)===normName(e.name))));markDirty();renderLines();render();renderCatBlocks();}
+function removeService(i){const it=STATE.booksCatalog[i];if(!it)return;STATE.cur.lines=STATE.cur.lines.filter(l=>!(l.kind==='book'&&((it.item_id&&l.itemId===it.item_id)||normName(l.name)===normName(it.name))));markDirty();renderLines();render();renderCatBlocks();}
+function renderWizard(){
+  const w=$('wizard');if(!w||!STATE.cur)return;
+  const plans=STATE.catalog.plans||[],addons=STATE.catalog.addons||[],svcs=STATE.booksCatalog||[];
+  if(STATE.step!==2){
+    const tf=STATE.planTermFilter||'all';
+    let h='<div class="steph">Step 1 · Select a plan <span class="hint">(pick term, then a plan)</span></div>';
+    h+='<div class="tabs" style="align-items:center">'+[['all','All terms'],['quarter','Quarterly'],['year','Yearly']].map(t=>'<button class="tab '+(tf===t[0]?'active':'')+'" data-ptf="'+t[0]+'">'+t[1]+'</button>').join('')+'<span class="spacer"></span><button class="ghost" data-path="addonsOnly" style="padding:6px 10px;margin-bottom:6px">Add-ons only</button><button class="ghost" data-path="servicesOnly" style="padding:6px 10px;margin-bottom:6px">Other services only</button></div>';
+    if(!plans.length)h+='<div class="hint" style="margin-bottom:8px">No plans loaded yet — click “↻ Rebuild from Zoho”, or use Add-ons only / Other services only above.</div>';
+    const curPlan=STATE.cur.lines.find(l=>l.kind==='plan');
+    let pitems=plans.map((p,i)=>({p:p,i:i}));
+    if(tf!=='all')pitems=pitems.filter(o=>periodOf(o.p.name,o.p.unit)===tf);
+    if(plans.length&&!pitems.length)h+='<div class="hint" style="margin-bottom:8px">No '+(tf==='quarter'?'quarterly':'yearly')+' plans found in the catalog.</div>';
+    h+='<div class="blocks">'+pitems.map(o=>{const sel=curPlan&&((o.p.item_id&&curPlan.itemId===o.p.item_id)||normName(curPlan.name)===normName(o.p.name));
+      return '<div class="block'+(sel?' sel':'')+'"><div class="bk-name">'+esc(o.p.name)+'</div><div class="bk-price">'+fmtINR(o.p.rate)+(o.p.unit?(' <span class="hint">/'+esc(o.p.unit)+'</span>'):'')+'</div>'+
+      '<button class="'+(sel?'on':'primary')+'" '+(sel?'data-rmplan="1"':'data-plan="'+o.i+'"')+'>'+(sel?'✓ Selected':'Select plan →')+'</button></div>';}).join('')+'</div>';
+    if(curPlan)h+='<div style="margin-top:12px"><button class="primary" id="toAddons">Continue to add-ons &amp; services →</button></div>';
+    w.innerHTML=h;
+    w.querySelectorAll('[data-ptf]').forEach(b=>b.onclick=()=>{STATE.planTermFilter=b.dataset.ptf;renderWizard();});
+    w.querySelectorAll('[data-plan]').forEach(b=>b.onclick=()=>addPlan(+b.dataset.plan));
+    w.querySelectorAll('[data-rmplan]').forEach(b=>b.onclick=()=>removePlan());
+    w.querySelectorAll('[data-path]').forEach(b=>b.onclick=()=>{STATE.path=b.dataset.path;STATE.step=2;STATE.tab=(b.dataset.path==='servicesOnly')?'service':'addon';renderWizard();});
+    const ta=$('toAddons');if(ta)ta.onclick=()=>{STATE.step=2;STATE.path='plan';STATE.tab='addon';renderWizard();};
+    return;
+  }
+  const planLine=STATE.cur.lines.find(l=>l.kind==='plan');
+  const label=STATE.path==='servicesOnly'?'Other services only':(STATE.path==='addonsOnly'?'Add-ons only':'No plan selected');
+  const ctx=planLine?('<span class="pill live">✓ Plan: '+esc(planLine.name)+'</span><button class="lk" id="changePlan">Change plan</button>')
+    :('<span class="pill gray">'+label+'</span><button class="lk" id="backStep1">← Choose a plan</button>');
+  const pp=planLine?periodOf(planLine.name,planLine.unit):'';
+  let h='<div class="steph">Step 2 · Add add-ons &amp; services <span class="hint">(optional)</span></div><div class="ctx">'+ctx+'</div>';
+  h+='<div class="tabs"><button class="tab '+(STATE.tab==='addon'?'active':'')+'" data-tab="addon">Add-ons</button><button class="tab '+(STATE.tab==='service'?'active':'')+'" data-tab="service">Other services</button></div>';
+  h+='<input id="catSearch" placeholder="🔎 Search '+(STATE.tab==='addon'?'add-ons':'services')+'…" autocomplete="off" value="'+esc(STATE.catSearch||'')+'" style="margin-bottom:10px">';
+  h+='<div id="catBlocks"></div>';
+  if(STATE.tab==='addon'&&planLine&&(pp==='quarter'||pp==='year'))h+='<div class="hint" style="margin-top:6px">Room license auto-calculated at the '+esc(planTier(planLine.name)||'plan')+' '+pp+' rate; adjust qty in the table if needed.</div>';
+  h+='<div style="margin-top:10px"><button class="ghost" id="addCustomBtn2">+ Custom line</button></div>';
+  w.innerHTML=h;
+  w.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{STATE.tab=b.dataset.tab;renderWizard();});
+  const cp=$('changePlan');if(cp)cp.onclick=()=>{STATE.step=1;renderWizard();};
+  const bs=$('backStep1');if(bs)bs.onclick=()=>{STATE.step=1;renderWizard();};
+  const ac=$('addCustomBtn2');if(ac)ac.onclick=addCustom;
+  const cs=$('catSearch');if(cs)cs.oninput=()=>{STATE.catSearch=cs.value;renderCatBlocks();};
+  renderCatBlocks();
+}
+function normName(s){return String(s||'').toLowerCase().replace(/\s+/g,' ').trim();}
+var GROUP_QR=['standard qr kit','co branded qr kit'];
+var GROUP_OTA=['fresh listing on single ota','essential reach','essential reach with google listing','bundle of 5 ota','bundle of 5 ota with google listing','bundle of 12 ota','bundle of 12 ota with google listing'];
+var GROUP_OPT=['essential reach optimization','optimization listing on single ota'];
+function isQrKit(n){return GROUP_QR.indexOf(normName(n))>=0;}
+function addonRank(a){const n=normName(a.name);if(GROUP_QR.indexOf(n)>=0)return 0;if(GROUP_OTA.indexOf(n)>=0)return 1;if(GROUP_OPT.indexOf(n)>=0)return 2;return 3;}
+function addonOrder(a,b){const ra=addonRank(a),rb=addonRank(b);if(ra!==rb)return ra-rb;if(ra<3)return (Number(a.rate)||0)-(Number(b.rate)||0);return String(a.name||'').localeCompare(String(b.name||''));}
+function renderCatBlocks(){
+  const w=$('catBlocks');if(!w||!STATE.cur)return;
+  const q=STATE.cur,planLine=q.lines.find(l=>l.kind==='plan'),pp=planLine?periodOf(planLine.name,planLine.unit):'';
+  const search=String(STATE.catSearch||'').toLowerCase().trim(),match=nm=>!search||String(nm||'').toLowerCase().indexOf(search)>=0;
+  let cards='';
+  if(STATE.tab==='addon'){
+    let items=(STATE.catalog.addons||[]).map((a,i)=>({a:a,i:i}));
+    items=items.filter(o=>!isRoomLicense(o.a.name)); // room licenses only appear (auto) once a plan is selected
+    if(planLine&&pp)items=items.filter(o=>{const ap=periodOf(o.a.name,o.a.unit);return ap===''||ap===pp;});
+    items.sort((x,y)=>addonOrder(x.a,y.a));
+    if(planLine&&(pp==='quarter'||pp==='year')){const price=roomAddonPrice(planLine.name,pp),rlName='Additional Room License for '+(pp==='year'?'Year':'Quarter');
+      if(price>0&&match(rlName)){const base=planBaseRooms(planLine.name),rooms=Number(q.customer.roomCount)||0,extra=Math.max(0,rooms-base);
+        cards+='<div class="block"><div class="bk-name">'+rlName+'</div><div class="bk-price">'+fmtINR(price)+' <span class="hint">/room</span></div><div class="hint">'+(rooms?('Auto: '+rooms+' rooms − '+base+' included → qty '+extra):('Set room count to auto-calc (beyond '+base+' rooms)'))+'</div></div>';}}
+    cards+=items.filter(o=>match(o.a.name)).map(o=>{const a=o.a,i=o.i,bundled=planLine&&isBundled(a.name,planLine.name),lockRoom=isRoomLicense(a.name)&&!hasPlan(),lock=bundled||lockRoom;
+      const added=STATE.cur.lines.some(l=>l.kind==='addon'&&((a.item_id&&l.itemId===a.item_id)||normName(l.name)===normName(a.name)));
+      const note=bundled?'<div class="hint">✓ Included in plan</div>':(lockRoom?'<div class="hint">Requires a plan</div>':'');
+      const btn=bundled?'✓ Included':(lockRoom?'🔒 Locked':(added?'✓ Added':'+ Add'));
+      const cls=lock?' disabled':(added?' sel':'');
+      const bcls=lock?'':(added?'on':'primary');
+      const battr=lock?' disabled':(added?(' data-rmaddon="'+i+'"'):(' data-addon="'+i+'"'));
+      return '<div class="block'+cls+'"><div class="bk-name">'+esc(a.name)+'</div><div class="bk-price">'+fmtINR(a.rate)+'</div>'+note+'<button class="'+bcls+'"'+battr+'>'+btn+'</button></div>';}).join('');
+  }else{
+    const svcs=(STATE.booksCatalog||[]).map((it,i)=>({it:it,i:i})).filter(o=>match(o.it.name)).sort((x,y)=>String(x.it.name||'').localeCompare(String(y.it.name||'')));
+    cards=svcs.map(o=>{const added=STATE.cur.lines.some(l=>l.kind==='book'&&((o.it.item_id&&l.itemId===o.it.item_id)||normName(l.name)===normName(o.it.name)));
+      return '<div class="block'+(added?' sel':'')+'"><div class="bk-name">'+esc(o.it.name)+'</div><div class="bk-price">'+fmtINR(Number(o.it.rate)||0)+'</div><button class="'+(added?'on':'primary')+'"'+(added?(' data-rmsvc="'+o.i+'"'):(' data-svc="'+o.i+'"'))+'>'+(added?'✓ Added':'+ Add')+'</button></div>';}).join('');
+  }
+  if(!cards)cards='<div class="hint">'+(search?'No matches for “'+esc(search)+'”.':'Nothing here — use “+ Custom line”.')+'</div>';
+  w.innerHTML='<div class="blocks">'+cards+'</div>';
+  w.querySelectorAll('[data-addon]').forEach(b=>b.onclick=()=>addAddon(+b.dataset.addon));
+  w.querySelectorAll('[data-svc]').forEach(b=>b.onclick=()=>addService(+b.dataset.svc));
+  w.querySelectorAll('[data-rmaddon]').forEach(b=>b.onclick=()=>removeAddon(+b.dataset.rmaddon));
+  w.querySelectorAll('[data-rmsvc]').forEach(b=>b.onclick=()=>removeService(+b.dataset.rmsvc));
+}
+
+/* ---------- coupons & POC ---------- */
+function renderCoupons(){
+  const sel=$('couponSelect');const cur=STATE.cur&&STATE.cur.coupon?STATE.cur.coupon.code:'';
+  sel.innerHTML='<option value="">— No coupon —</option>';
+  STATE.catalog.coupons.forEach(c=>{const o=document.createElement('option');o.value=c.code;
+    const eff=c.percent?(c.percent+'%'):(c.amount?fmtINR(c.amount):'');o.textContent=c.code+' · '+c.name+(eff?(' ('+eff+')'):'');sel.appendChild(o);});
+  sel.value=cur;
+}
+function applyCoupon(code){
+  const c=STATE.catalog.coupons.find(x=>x.code===code);
+  if(!c){STATE.cur.coupon=null;STATE.cur.overallDiscType='pct';STATE.cur.overallDiscValue=0;}
+  else{STATE.cur.coupon={code:c.code,name:c.name};
+    if(c.percent){STATE.cur.overallDiscType='pct';STATE.cur.overallDiscValue=c.percent;}
+    else if(c.amount){STATE.cur.overallDiscType='flat';STATE.cur.overallDiscValue=c.amount;}
+    else{STATE.cur.overallDiscType='pct';STATE.cur.overallDiscValue=0;}}
+  markDirty();render();
+}
+function renderPocList(){const dl=$('pocList');dl.innerHTML='';const names=Array.from(new Set((STATE.catalog.pocs||[]).concat(['abhinav'])));names.forEach(n=>{const o=document.createElement('option');o.value=n;dl.appendChild(o);});}
+
+/* ---------- HubSpot customer search ---------- */
+let searchTimer=null;
+function onCustSearch(){clearTimeout(searchTimer);const q=$('custSearch').value.trim();if(q.length<2){$('custResults').className='dropdown';return;}searchTimer=setTimeout(()=>doCustSearch(q),320);}
+async function doCustSearch(q){
+  $('custLoad').textContent='searching…';
+  try{
+    const obj=await call(HUBSPOT+'__search_crm_objects',{objectType:'contacts',query:q,limit:8,
+      properties:['firstname','lastname','email','phone','city','state','property_state','pincode','zip','hubspot_owner_id','hotel_name','hotel_name_enriched','enrichment_hotel_name','referred_hotel_name','digistay_room_count','number_of_rooms','number_of_rooms_in_your_hotel','property_rooms','property_name','whats_your_property_type'],
+      chatInsights:{userIntent:'Look up a customer to build a quotation',satisfaction:'NEUTRAL'}});
+    const res=(obj&&obj.results)||(obj&&obj.data&&obj.data.results)||[];
+    const dd=$('custResults');dd.innerHTML='';
+    if(!res.length)dd.innerHTML='<div class="opt"><span class="meta">No contacts found</span></div>';
+    res.forEach(r=>{const p=r.properties||{};const nm=((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||'(no name)';const rooms=parseRooms(p);
+      const hot=firstVal(p.hotel_name,p.property_name,p.hotel_name_enriched,p.enrichment_hotel_name,p.referred_hotel_name);
+      const div=document.createElement('div');div.className='opt';
+      div.innerHTML='<div class="nm">'+esc(nm)+(hot?(' <span class="hint">· '+esc(hot)+'</span>'):'')+'</div><div class="meta">'+esc(p.email||'no email')+' · '+esc(p.phone||'')+' · '+esc([p.city,p.state].filter(Boolean).join(', '))+(rooms!==''?' · '+rooms+' rooms':'')+'</div>';
+      div.onclick=()=>selectCustomer(r);dd.appendChild(div);});
+    dd.className='dropdown show';
+  }catch(e){$('custResults').innerHTML='<div class="opt"><span class="meta">⚠ '+esc(e.message)+'</span></div>';$('custResults').className='dropdown show';}
+  $('custLoad').textContent='';
+}
+function selectCustomer(r){
+  const p=r.properties||{},c=STATE.cur.customer;
+  c.name=((p.firstname||'')+' '+(p.lastname||'')).trim()||c.name;c.email=p.email||'';c.phone=p.phone||'';c.city=p.city||'';
+  c.state=p.property_state||p.state||'';c.pincode=p.pincode||p.zip||'';
+  c.propertyName=firstVal(p.hotel_name,p.property_name,p.hotel_name_enriched,p.enrichment_hotel_name,p.referred_hotel_name);c.roomCount=parseRooms(p);c.hubspotId=r.id;c.zohoId='';c.ownerId=p.hubspot_owner_id||'';STATE.cur._pinState=false;
+  $('custResults').className='dropdown';$('custSearch').value='';
+  $('zohoMatchInfo').textContent='';syncFormFromState();resolveTax();resolveOwnerPOC(c.ownerId);syncRoomLicense();renderWizard();renderLines();markDirty();render();
+}
+async function resolveOwnerPOC(id){
+  if(!id)return;
+  let name=STATE.ownerCache[id];
+  if(!name){
+    try{const obj=await call(HUBSPOT+'__search_owners',{ownerIds:[Number(id)]});
+      const ow=(obj&&obj.owners)||(obj&&obj.data&&obj.data.owners)||[];
+      if(ow.length&&ow[0].name){name=ow[0].name;STATE.ownerCache[id]=name;}
+    }catch(e){}
+  }
+  if(name){STATE.cur.poc=name;if($('pocName'))$('pocName').value=name;markDirty();render();flash('POC set from HubSpot contact owner: '+name);}
+}
+
+/* ---------- Zoho customer match (best-effort) ---------- */
+async function matchZoho(){
+  const c=STATE.cur.customer,name=c.name.trim();
+  if(!name&&!c.email){$('zohoMatchInfo').textContent='Enter a customer name first.';return;}
+  $('zohoMatchInfo').textContent='searching Zoho…';
+  try{
+    const obj=await call(ZOHO+'__list_contacts',{query_params:{organization_id:ORG,contact_name:name,per_page:200,filter_by:'Status.All'}});
+    const list=(obj&&obj.data&&obj.data.contacts)||(obj&&obj.contacts)||[];
+    const el=String(c.email||'').toLowerCase();
+    let m=el?list.find(z=>String(z.email||'').toLowerCase()===el):null;
+    if(!m){const nl=name.toLowerCase();m=list.find(z=>String(z.contact_name||'').toLowerCase().includes(nl)||String(z.customer_name||'').toLowerCase().includes(nl));}
+    if(m){c.zohoId=m.contact_id;if(m.gst_no)c.gstin=m.gst_no;if(m.place_of_contact_formatted&&!c.state)c.state=m.place_of_contact_formatted;
+      const out=Number(m.outstanding_receivable_amount||0);
+      $('zohoMatchInfo').innerHTML='<span class="pill">✓ Zoho: '+esc(m.contact_name||'')+'</span> '+(m.gst_no?('GSTIN '+esc(m.gst_no)):'no GSTIN')+(out>0?(' · outstanding '+fmtINR(out)):'');
+      syncFormFromState();markDirty();render();}
+    else $('zohoMatchInfo').textContent='No Zoho customer matched (HubSpot details will be used).';
+  }catch(e){$('zohoMatchInfo').textContent='⚠ '+e.message;}
+}
+
+/* ---------- line items ---------- */
+function addCustom(){STATE.cur.lines.push({itemId:'',name:'',desc:'',rate:0,qty:1,perRoom:false,discountPct:0,gst:18,kind:'custom',_open:true});markDirty();renderLines();render();}
+function renderLines(){
+  const tb=$('linesBody');tb.innerHTML='';
+  if(!STATE.cur.lines.length){tb.innerHTML='<tr><td colspan="6" class="empty">No items yet — add a plan, add-on or service above.</td></tr>';return;}
+  STATE.cur.lines.forEach((l,i)=>{
+    const capped=(l.kind==='plan')||(l.kind==='addon'&&!l.autoRoom&&!isQrKit(l.name));
+    if(capped){l.perRoom=false;l.qty=Math.min(2,Math.max(1,Number(l.qty)||1));}
+    const freeQty=(l.autoRoom||isQrKit(l.name));
+    if(freeQty)l.perRoom=false;
+    const qtyEff=l.perRoom?(Number(STATE.cur.customer.roomCount)||0):Number(l.qty)||0;
+    const amount=(Number(l.rate)||0)*qtyEff*(1-(Number(l.discountPct)||0)/100);
+    const tag=l.kind==='plan'?'<span class="pill" style="font-size:10px">plan</span> ':(l.kind==='addon'?('<span class="pill gray" style="font-size:10px">add-on'+(l.autoRoom?' · auto':'')+'</span> '):'');
+    const qtyCell=capped
+      ?('<select data-i="'+i+'" data-k="qty"><option value="1"'+(l.qty===1?' selected':'')+'>1</option><option value="2"'+(l.qty===2?' selected':'')+'>2</option></select>')
+      :(freeQty
+        ?('<input class="num" data-i="'+i+'" data-k="qty" type="number" min="0" value="'+(l.qty)+'" style="width:64px"'+(l.autoRoom?' title="Auto from room count — editable"':'')+'>')
+        :('<div class="flexrow" style="gap:4px"><input data-i="'+i+'" data-k="qty" type="number" min="0" value="'+(l.qty)+'" style="width:54px" '+(l.perRoom?'disabled':'')+'><label class="chk"><input type="checkbox" data-i="'+i+'" data-k="perRoom" '+(l.perRoom?'checked':'')+'>×rooms</label></div>'));
+    const tr=document.createElement('tr');
+    tr.innerHTML=
+      '<td>'+tag+'<input data-i="'+i+'" data-k="name" value="'+esc(l.name)+'" placeholder="Item name" style="display:inline-block;width:calc(100% - 26px)"> <button class="lk" data-tog="'+i+'" title="Edit features/description">✎</button></td>'+
+      '<td class="num"><input class="num" data-i="'+i+'" data-k="rate" type="number" step="0.01" value="'+(l.rate)+'"></td>'+
+      '<td>'+qtyCell+'</td>'+
+      '<td class="num"><input class="num" data-i="'+i+'" data-k="gst" type="number" min="0" value="'+(l.gst)+'"></td>'+
+      '<td class="num">'+fmtINR(amount)+'</td>'+
+      '<td><button class="x" data-del="'+i+'" title="Remove">✕</button></td>';
+    tb.appendChild(tr);
+    if(l._open){const dr=document.createElement('tr');dr.className='det';
+      dr.innerHTML='<td colspan="6"><label>Description / included features (one per line)</label><textarea data-i="'+i+'" data-k="desc" rows="3">'+esc(l.desc)+'</textarea></td>';
+      tb.appendChild(dr);}
+  });
+  tb.querySelectorAll('input,textarea,select').forEach(inp=>{
+    const ev=(inp.tagName==='SELECT'||inp.type==='checkbox')?'change':'input';
+    inp.addEventListener(ev,e=>{const i=+e.target.dataset.i,k=e.target.dataset.k;let v=e.target.type==='checkbox'?e.target.checked:e.target.value;
+      if(['rate','qty','discountPct','gst'].includes(k))v=v===''?'':Number(v);
+      if(k==='qty'){const L=STATE.cur.lines[i];if(L.kind==='plan'||(L.kind==='addon'&&!L.autoRoom&&!isQrKit(L.name)))v=Math.min(2,Math.max(1,Number(v)||1));}
+      STATE.cur.lines[i][k]=v;markDirty();
+      if(['perRoom','rate','qty','discountPct','gst'].includes(k))renderLines();
+      render();});
+  });
+  tb.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{const idx=+b.dataset.del;const wasPlan=STATE.cur.lines[idx]&&STATE.cur.lines[idx].kind==='plan';STATE.cur.lines.splice(idx,1);if(wasPlan)syncRoomLicense();markDirty();renderLines();render();renderWizard();});
+  tb.querySelectorAll('[data-tog]').forEach(b=>b.onclick=()=>{const i=+b.dataset.tog;STATE.cur.lines[i]._open=!STATE.cur.lines[i]._open;renderLines();});
+}
+
+/* ---------- price drift (Books items only) ---------- */
+function checkPriceDrift(){
+  const b=$('priceBanner');if(!STATE.cur){b.className='banner';return;}
+  let drift=[];
+  STATE.cur.lines.forEach(l=>{if(l.kind==='book'&&l.itemId&&STATE.itemsById[l.itemId]){const live=Number(STATE.itemsById[l.itemId].rate);if(isFinite(live)&&Math.abs(live-Number(l.rate))>0.001)drift.push(l.name+': '+fmtINR(l.rate)+' → '+fmtINR(live));}});
+  if(drift.length){b.className='banner show';b.innerHTML='⚠ Live Zoho Books prices changed: '+esc(drift.join(' · '))+' &nbsp; <button id="syncBtn" style="padding:3px 9px">Update to live</button>';$('syncBtn').onclick=syncPrices;}
+  else b.className='banner';
+}
+function syncPrices(){STATE.cur.lines.forEach(l=>{if(l.kind==='book'&&l.itemId&&STATE.itemsById[l.itemId]){l.rate=Number(STATE.itemsById[l.itemId].rate);l.gst=bookGst(STATE.itemsById[l.itemId]);}});markDirty();renderLines();render();checkPriceDrift();flash('Books item prices updated to live Zoho rates.');}
+
+/* ---------- totals ---------- */
+function compute(q){
+  const lines=q.lines.map(l=>{const qty=l.perRoom?(Number(q.customer.roomCount)||0):Number(l.qty)||0;const gross=(Number(l.rate)||0)*qty;
+    const lineDisc=gross*(Number(l.discountPct)||0)/100;const afterLine=gross-lineDisc;
+    return Object.assign({},l,{qtyEff:qty,gross:gross,lineDisc:lineDisc,afterLine:afterLine,gstv:Number(l.gst)||0});});
+  const sumAfterLine=lines.reduce((a,l)=>a+l.afterLine,0);
+  let overall=0;if(q.overallDiscType==='flat')overall=Number(q.overallDiscValue)||0;else overall=sumAfterLine*(Number(q.overallDiscValue)||0)/100;
+  overall=Math.max(0,Math.min(overall,sumAfterLine));
+  let totalTax=0,taxable=0;const cl=lines.map(l=>{const share=sumAfterLine>0?l.afterLine/sumAfterLine:0;const tx=l.afterLine-overall*share;const tax=tx*l.gstv/100;totalTax+=tax;taxable+=tx;return Object.assign({},l,{taxable:tx,tax:tax});});
+  return {lines:cl,sumGross:lines.reduce((a,l)=>a+l.gross,0),lineDiscTotal:lines.reduce((a,l)=>a+l.lineDisc,0),overall:overall,taxable:taxable,totalTax:totalTax,grand:taxable+totalTax};
+}
+
+/* ---------- logo ---------- */
+function logoHtml(big){const s=STATE.seller;if(s.logo)return '<img src="'+s.logo+'" alt="logo" style="max-height:'+(big?52:48)+'px;max-width:200px">';return WORDMARK;}
+function renderLogoPreview(){$('logoPreview').innerHTML=STATE.seller.logo?('<img src="'+STATE.seller.logo+'" alt="logo">'):WORDMARK;}
+
+/* ---------- preview render ---------- */
+function render(){
+  const q=STATE.cur,s=STATE.seller,c=q.customer,t=compute(q),intra=q.taxMode==='intra';
+  const sellerLines=[s.address,'GSTIN: '+(s.gstin||'—'),s.email+(s.phone?(' · '+s.phone):'')].filter(Boolean).join('\n');
+  const csp=[[c.city,c.state].filter(Boolean).join(', '),c.pincode].filter(Boolean).join(' - ');
+  const billLines=[csp,c.gstin?('GSTIN: '+c.gstin):'',c.email,c.phone].filter(Boolean).join('\n');
+  const hd=!!STATE.hideDisc;
+  const odp=(q.overallDiscType==='pct'&&Number(q.overallDiscValue)>0)?Number(q.overallDiscValue):0;
+  let rows=t.lines.map((l,i)=>{const feats=featList(l.desc);const dpct=(Number(l.discountPct)||0)||odp;
+    const featHtml=feats.length?('<ul class="qd-feat">'+feats.map(f=>'<li>'+esc(f)+'</li>').join('')+'</ul>'):'';
+    return '<tr><td>'+(i+1)+'. <b>'+esc(l.name||'Item')+'</b>'+(l.perRoom?' <span class="pill gray">per room</span>':'')+featHtml+'</td><td class="num">'+fmtINR(l.rate)+'</td><td class="num">'+l.qtyEff+'</td><td class="num">'+(hd?'—':(dpct?dpct+'%':'—'))+'</td><td class="num">'+fmtINR(hd?l.taxable:l.afterLine)+'</td></tr>';}).join('');
+  if(!t.lines.length)rows='<tr><td colspan="5" class="empty">No line items added yet.</td></tr>';
+  const roomsBadge=c.roomCount!==''&&c.roomCount!=null?(' · '+c.roomCount+' rooms'):'';
+  const couponLine=q.coupon?('<div class="tot"><span class="muted">Coupon '+esc(q.coupon.code)+'</span><span>'+esc(q.coupon.name)+'</span></div>'):'';
+  $('quoteDoc').innerHTML=
+   '<div class="qd-head"><div><div class="qd-logo">'+logoHtml(true)+'</div><div class="qd-sub">'+esc(s.name)+'\n'+esc(sellerLines)+'</div></div>'+
+     '<div class="qd-title"><div class="t">QUOTATION</div><div class="qd-meta"><b>'+esc(q.number||'(unsaved)')+'</b><br>Date: '+esc(q.date)+'<br>Valid until: '+esc(q.validUntil)+(q.poc?('<br>Prepared by: '+esc(q.poc)):'')+(q.paid?('<br><b style="color:var(--ok)">✅ PAID '+fmtINR(q.paidAmount)+'</b>'):'')+'</div></div></div>'+
+   '<div class="qd-parties"><div><h4>Bill To</h4><div class="b"><b>'+esc(c.name||'—')+'</b>'+(c.propertyName?(' <span class="muted">('+esc(c.propertyName)+')</span>'):'')+roomsBadge+'\n'+esc(billLines||'—')+'</div></div>'+
+     '<div><h4>Summary</h4><div class="b muted">'+(q.subject?('<b style="color:var(--ink)">'+esc(q.subject)+'</b>\n'):'')+t.lines.length+' line item(s)\nTax: '+(intra?'CGST + SGST':'IGST')+'\nTotal: <b style="color:var(--ink)">'+fmtINR(t.grand)+'</b></div></div></div>'+
+   '<table class="qd"><thead><tr><th>Item</th><th class="num">Rate</th><th class="num">Qty</th><th class="num">Disc</th><th class="num">Amount</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+   '<div class="qd-tot">'+
+     (hd?('<div class="tot"><span class="muted">Subtotal</span><span>'+fmtINR(t.taxable)+'</span></div>')
+        :('<div class="tot"><span class="muted">Subtotal</span><span>'+fmtINR(t.sumGross)+'</span></div>'+
+     (t.lineDiscTotal>0?'<div class="tot"><span class="muted">Line discounts</span><span>− '+fmtINR(t.lineDiscTotal)+'</span></div>':'')+
+     couponLine+
+     (t.overall>0?'<div class="tot"><span class="muted">Discount'+(q.overallDiscType==='pct'&&Number(q.overallDiscValue)>0?(' ('+Number(q.overallDiscValue)+'%)'):'')+'</span><span>− '+fmtINR(t.overall)+'</span></div>':'')+
+     '<div class="tot"><span class="muted">Taxable value</span><span>'+fmtINR(t.taxable)+'</span></div>'))+
+     (intra?('<div class="tot"><span class="muted">CGST</span><span>'+fmtINR(t.totalTax/2)+'</span></div><div class="tot"><span class="muted">SGST</span><span>'+fmtINR(t.totalTax/2)+'</span></div>'):('<div class="tot"><span class="muted">IGST</span><span>'+fmtINR(t.totalTax)+'</span></div>'))+
+     '<div class="tot grand"><span>Total</span><span>'+fmtINR(t.grand)+'</span></div>'+
+   '</div>'+
+   ((q.notes||q.terms)?('<div class="qd-note">'+(q.notes?('<b>Notes:</b> '+esc(q.notes)+'\n'):'')+(q.terms?('<b>Terms:</b> '+esc(q.terms)):'')+'</div>'):'');
+  updateTaxBasis();
+}
+
+/* ---------- email ---------- */
+function buildEmailHtml(){
+  const q=STATE.cur,s=STATE.seller,c=q.customer,t=compute(q),intra=q.taxMode==='intra';
+  const td='style="padding:7px 9px;border-bottom:1px solid #e2e8f0;font-size:13px"';
+  const tdn='style="padding:7px 9px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right"';
+  const odp=(q.overallDiscType==='pct'&&Number(q.overallDiscValue)>0)?Number(q.overallDiscValue):0;
+  let rows=t.lines.map((l,i)=>{const feats=featList(l.desc);const f=feats.length?('<div style="font-size:11px;color:#64748b">'+feats.map(esc).join(' · ')+'</div>'):'';const dpct=(Number(l.discountPct)||0)||odp;
+    return '<tr><td '+td+'>'+(i+1)+'. <b>'+esc(l.name||'Item')+'</b>'+(l.perRoom?' (per room)':'')+f+'</td><td '+tdn+'>'+fmtINR(l.rate)+'</td><td '+tdn+'>'+l.qtyEff+'</td><td '+tdn+'>'+(dpct?dpct+'%':'—')+'</td><td '+tdn+'>'+fmtINR(l.afterLine)+'</td></tr>';}).join('');
+  const tax=intra?('<tr><td colspan="4" '+tdn+'>CGST</td><td '+tdn+'>'+fmtINR(t.totalTax/2)+'</td></tr><tr><td colspan="4" '+tdn+'>SGST</td><td '+tdn+'>'+fmtINR(t.totalTax/2)+'</td></tr>'):('<tr><td colspan="4" '+tdn+'>IGST</td><td '+tdn+'>'+fmtINR(t.totalTax)+'</td></tr>');
+  const logo=s.logo?('<img src="'+s.logo+'" style="max-height:46px">'):('<span style="font-size:22px;font-weight:bold;color:#0f766e">DigiStay</span>');
+  return '<div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:660px">'+
+    '<div style="border-bottom:3px solid #0f766e;padding-bottom:10px;margin-bottom:14px">'+logo+'<div style="font-size:12px;color:#64748b">'+esc(s.name)+' · GSTIN '+esc(s.gstin||'—')+'</div></div>'+
+    '<p style="font-size:14px">Dear '+esc(c.name||'Customer')+',</p>'+
+    '<p style="font-size:14px">Please find your quotation <b>'+esc(q.number||'')+'</b> dated '+esc(q.date)+' (valid until '+esc(q.validUntil)+')'+(c.roomCount!==''?(' for your property'+(c.propertyName?(' '+esc(c.propertyName)):'')+' ('+esc(c.roomCount)+' rooms)'):'')+'.</p>'+
+    '<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr style="background:#0f766e;color:#fff"><th style="padding:8px;text-align:left;font-size:12px">Item</th><th style="padding:8px;text-align:right;font-size:12px">Rate</th><th style="padding:8px;text-align:right;font-size:12px">Qty</th><th style="padding:8px;text-align:right;font-size:12px">Disc</th><th style="padding:8px;text-align:right;font-size:12px">Amount</th></tr></thead><tbody>'+rows+
+    (t.overall>0?('<tr><td colspan="4" '+tdn+'>Discount'+(q.overallDiscType==='pct'&&Number(q.overallDiscValue)>0?(' ('+Number(q.overallDiscValue)+'%)'):'')+(q.coupon?(' · '+esc(q.coupon.code)):'')+'</td><td '+tdn+'>− '+fmtINR(t.overall)+'</td></tr>'):'')+
+    '<tr><td colspan="4" '+tdn+'>Taxable value</td><td '+tdn+'>'+fmtINR(t.taxable)+'</td></tr>'+tax+
+    '<tr><td colspan="4" style="padding:9px;text-align:right;font-weight:bold;border-top:2px solid #0f172a">Total</td><td style="padding:9px;text-align:right;font-weight:bold;border-top:2px solid #0f172a">'+fmtINR(t.grand)+'</td></tr></tbody></table>'+
+    (q.coupon?('<p style="font-size:12px;color:#475569">Coupon applied: <b>'+esc(q.coupon.code)+'</b> ('+esc(q.coupon.name)+')</p>'):'')+
+    (q.notes?('<p style="font-size:13px;color:#475569"><b>Notes:</b> '+esc(q.notes)+'</p>'):'')+
+    (q.terms?('<p style="font-size:12px;color:#64748b"><b>Terms:</b> '+esc(q.terms)+'</p>'):'')+
+    '<p style="font-size:13px">Regards,<br>'+esc(q.poc||'DigiStay Team')+'<br>'+esc(s.brand||'DigiStay')+' · '+esc(s.email)+' · '+esc(s.phone)+'</p></div>';
+}
+async function emailQuote(){
+  const q=STATE.cur,c=q.customer;
+  if(!c.email){flash('Add a customer email first — Zoho sends the estimate to that address.',true);return;}
+  if(!q.lines.length){flash('Add at least one plan/service before sending.',true);return;}
+  const btn=$('emailBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Sending via Zoho…';
+  await syncExternal({zoho:true,hubspot:true,sent:true,silent:true});
+  btn.disabled=false;btn.textContent=old;
+  const cur=STATE.cur;
+  if(cur.zohoEmailed){flash('✅ Estimate '+(cur.zohoEstimateNumber||'')+' emailed to '+esc(c.email)+' via Zoho.');}
+  else{
+    const u=cur.zohoEstimateUrl;
+    if(u&&navigator.clipboard&&navigator.clipboard.writeText){try{navigator.clipboard.writeText(u);}catch(e){}}
+    flash('Saved to Zoho as '+(cur.zohoEstimateNumber||'')+' (Draft), but it was NOT auto-emailed'+(cur.zohoSendError?(' — '+cur.zohoSendError):'.')+(u?' The shareable estimate link is copied to your clipboard — paste it to the customer, or enable estimate email in Zoho settings.':''),true);
+  }
+}
+
+/* ---------- external sync: Zoho estimate + HubSpot note ---------- */
+const ZOHO_GST18='3296275000000032490';
+const ZOHO_IGST18='3296275000000032414';
+const RAZORPAY='mcp__f194d9b7-4a73-4b66-9f3b-87d17c296d4c';
+const STATE_CODE={'andaman and nicobar islands':'AN','andhra pradesh':'AP','arunachal pradesh':'AR','assam':'AS','bihar':'BR','chandigarh':'CH','chhattisgarh':'CG','dadra and nagar haveli and daman and diu':'DN','delhi':'DL','goa':'GA','gujarat':'GJ','haryana':'HR','himachal pradesh':'HP','jammu and kashmir':'JK','jharkhand':'JH','karnataka':'KA','kerala':'KL','ladakh':'LA','lakshadweep':'LD','madhya pradesh':'MP','maharashtra':'MH','manipur':'MN','meghalaya':'ML','mizoram':'MZ','nagaland':'NL','odisha':'OD','puducherry':'PY','punjab':'PB','rajasthan':'RJ','sikkim':'SK','tamil nadu':'TN','telangana':'TS','tripura':'TR','uttar pradesh':'UP','uttarakhand':'UK','west bengal':'WB'};
+function stateCode(s){return STATE_CODE[String(s||'').trim().toLowerCase()]||'';}
+function persistCur(){const i=STATE.db.quotes.findIndex(x=>x.id===STATE.cur.id);const copy=JSON.parse(JSON.stringify(STATE.cur));if(i>=0)STATE.db.quotes[i]=copy;else STATE.db.quotes.push(copy);saveDB();}
+function loadCustMap(){try{return JSON.parse(localStorage.getItem('digistay_zohocustmap')||'{}');}catch(e){return {};}}
+function saveCustMap(m){try{localStorage.setItem('digistay_zohocustmap',JSON.stringify(m));}catch(e){}}
+async function findZohoCustomer(c,wantName){
+  const el=String(c.email||'').toLowerCase();const tries=[c.email,wantName,c.name].filter(Boolean);
+  for(const tx of tries){
+    try{const obj=await call(ZOHO+'__list_contacts',{query_params:{organization_id:ORG,search_text:String(tx).slice(0,100),per_page:20,filter_by:'Status.All'}});
+      const list=(obj&&obj.data&&obj.data.contacts)||(obj&&obj.contacts)||[];
+      let m=el?list.find(z=>String(z.email||'').toLowerCase()===el):null;
+      if(!m)m=list.find(z=>String(z.contact_name||'').trim().toLowerCase()===String(wantName).trim().toLowerCase());
+      if(m)return m;}catch(e){}
+  }
+  return null;
+}
+async function ensureZohoCustomer(q){
+  if(q.zohoCustomerId)return q.zohoCustomerId;
+  if(q.customer.zohoId){q.zohoCustomerId=q.customer.zohoId;return q.zohoCustomerId;}
+  const c=q.customer;const wantName=((c.name||'Customer')+(c.propertyName?(' - '+c.propertyName):'')).trim();
+  const map=loadCustMap();const key=c.hubspotId?('hs:'+c.hubspotId):('em:'+String(c.email||'').toLowerCase());
+  if(map[key]){q.zohoCustomerId=map[key];q.customer.zohoId=map[key];return map[key];}
+  let m=await findZohoCustomer(c,wantName);
+  if(m){q.zohoCustomerId=m.contact_id;q.customer.zohoId=m.contact_id;map[key]=m.contact_id;saveCustMap(map);return m.contact_id;}
+  const body={contact_name:wantName,contact_type:'customer',customer_sub_type:'business',gst_treatment:c.gstin?'business_gst':'business_none'};
+  if(c.gstin)body.gst_no=c.gstin;
+  const pc=stateCode(c.state);if(pc)body.place_of_contact=pc;
+  body.billing_address={address:'',city:c.city||'',state:c.state||'',zip:c.pincode||'',country:'India',phone:c.phone||'',attention:c.name||''};
+  if(c.email||c.phone)body.contact_persons=[{first_name:c.name||'Customer',email:c.email||'',phone:c.phone||'',is_primary_contact:true}];
+  try{
+    const r=await call(ZOHO+'__create_contact',{query_params:{organization_id:ORG},body:body});
+    const contact=(r&&r.data&&r.data.contact)||(r&&r.contact);const id=contact&&contact.contact_id;
+    if(!id)throw new Error((r&&r.data&&r.data.message)||'could not create Zoho customer');
+    q.zohoCustomerId=id;q.customer.zohoId=id;map[key]=id;saveCustMap(map);return id;
+  }catch(e){
+    if(/already exists/i.test(e.message||'')){const m2=await findZohoCustomer(c,wantName);if(m2){q.zohoCustomerId=m2.contact_id;q.customer.zohoId=m2.contact_id;map[key]=m2.contact_id;saveCustMap(map);return m2.contact_id;}}
+    throw e;
+  }
+}
+function buildZohoLines(q){const t=compute(q);const tax=(q.taxMode==='inter')?ZOHO_IGST18:ZOHO_GST18;return t.lines.filter(l=>(l.qtyEff||0)>0).map(l=>({name:String(l.name||'Item').slice(0,200),rate:Number(l.rate)||0,quantity:l.qtyEff,tax_id:tax,description:String(l.desc||'').slice(0,1800)}));}
+// Find the customer's primary contact-person id so the estimate can actually be emailed to them.
+async function getZohoContactPersonId(q){
+  if(q.customer.zohoContactPersonId)return q.customer.zohoContactPersonId;
+  const cid=q.zohoCustomerId||q.customer.zohoId;if(!cid)return '';
+  try{const r=await call(ZOHO+'__get_contact',{path_variables:{contact_id:cid},query_params:{organization_id:ORG}});
+    const c=(r&&r.data&&r.data.contact)||(r&&r.contact);if(!c)return '';
+    let cp=c.primary_contact_id||'';
+    if(!cp&&Array.isArray(c.contact_persons)&&c.contact_persons.length){const pr=c.contact_persons.find(x=>x&&x.is_primary_contact)||c.contact_persons[0];cp=(pr&&pr.contact_person_id)||'';}
+    if(cp)q.customer.zohoContactPersonId=cp;return cp;
+  }catch(e){return '';}
+}
+// Re-read the estimate after a send attempt to confirm Zoho actually emailed it.
+async function verifyEmailed(estId){
+  try{const v=await call(ZOHO+'__get_estimate',{path_variables:{estimate_id:estId},query_params:{organization_id:ORG}});
+    const e=(v&&v.data&&v.data.estimate)||(v&&v.estimate)||{};
+    return {emailed:(!!e.is_emailed)||String(e.status||'')==='sent',status:String(e.status||''),url:e.estimate_url||''};
+  }catch(e){return {emailed:false,status:'',url:''};}
+}
+async function pushToZoho(q,markSent){
+  const lines=buildZohoLines(q);if(!lines.length)throw new Error('no items');
+  const cid=await ensureZohoCustomer(q);const t=compute(q);
+  const cpid=await getZohoContactPersonId(q);
+  const body={customer_id:cid,date:q.date,reference_number:String(q.number||''),notes:q.notes||'',terms:q.terms||'',line_items:lines,is_discount_before_tax:true};
+  const pc=stateCode(q.customer.state);if(pc)body.place_of_supply=pc;
+  if(q.poc)body.salesperson_name=q.poc;
+  if(q.validUntil)body.expiry_date=q.validUntil;
+  // Attach the contact person with email enabled so send:true has a recipient.
+  if(cpid)body.contact_persons_associated=[{contact_person_id:cpid,communication_preference:{is_email_enabled:true}}];
+  body.discount=t.overall>0?Number(t.overall.toFixed(2)):0;body.discount_type='entity_level';
+  async function createNew(send){
+    const r=await call(ZOHO+'__create_estimate',{query_params:{organization_id:ORG,send:!!send},body:body});
+    const est=(r&&r.data&&r.data.estimate)||(r&&r.estimate);
+    if(!est||!est.estimate_id)throw new Error((r&&r.data&&r.data.message)||'create failed');
+    q.zohoEstimateId=est.estimate_id;q.zohoEstimateNumber=est.estimate_number||'';q.zohoEstimateUrl=est.estimate_url||q.zohoEstimateUrl||'';return est;
+  }
+  // Send => deliver a fresh emailed estimate, replacing the previous one. If Zoho can't email, keep it as a saved draft.
+  if(markSent){
+    q.zohoEmailed=false;q.zohoSendError='';
+    const oldId=q.zohoEstimateId;q.zohoEstimateId='';
+    let est;
+    try{est=await createNew(true);}
+    catch(e){est=await createNew(false);q.zohoSendError=e.message||'Zoho rejected the send request.';}
+    if(oldId){try{await call(ZOHO+'__delete_estimate',{path_variables:{estimate_id:oldId},query_params:{organization_id:ORG}});}catch(e){}}
+    const v=await verifyEmailed(est.estimate_id);
+    q.zohoEmailed=v.emailed;if(v.url)q.zohoEstimateUrl=v.url;
+    q.zohoStatus=v.emailed?'sent':'draft';
+    if(!v.emailed&&!q.zohoSendError)q.zohoSendError='Zoho saved the estimate but did not email it — estimate email may be disabled in your Zoho settings.';
+    return est;
+  }
+  // Save => create a Draft once, then update it in place (keeps it in real-time sync with Zoho).
+  if(!q.zohoEstimateId){const est=await createNew(false);if(q.zohoStatus!=='sent'&&q.zohoStatus!=='paid')q.zohoStatus='draft';return est;}
+  await call(ZOHO+'__update_estimate',{path_variables:{estimate_id:q.zohoEstimateId},query_params:{organization_id:ORG},body:Object.assign({custom_fields:[]},body)});
+  if(q.zohoStatus!=='sent'&&q.zohoStatus!=='paid')q.zohoStatus='draft';
+  return true;
+}
+function noteBodyHtml(q){
+  const t=compute(q),intra=q.taxMode==='intra';
+  const rows=t.lines.map(l=>'<li>'+esc(l.name||'Item')+' — '+fmtINR(l.rate)+' × '+l.qtyEff+' = <b>'+fmtINR(l.afterLine)+'</b></li>').join('');
+  return '<b>DigiStay Quotation '+esc(q.number||'')+'</b> ('+esc(q.date)+(q.validUntil?(' · valid till '+esc(q.validUntil)):'')+')<br>'+
+    (q.customer.propertyName?('Property: '+esc(q.customer.propertyName)+' · '):'')+(q.customer.roomCount!==''&&q.customer.roomCount!=null?('Rooms: '+esc(q.customer.roomCount)):'')+'<br>'+
+    'Prepared by: '+esc(q.poc||'-')+'<br><ul>'+rows+'</ul>'+
+    (t.overall>0?('Discount'+(q.overallDiscType==='pct'&&Number(q.overallDiscValue)>0?(' ('+Number(q.overallDiscValue)+'%)'):'')+(q.coupon?(' '+esc(q.coupon.code)):'')+': − '+fmtINR(t.overall)+'<br>'):'')+
+    (intra?('CGST: '+fmtINR(t.totalTax/2)+' · SGST: '+fmtINR(t.totalTax/2)):('IGST: '+fmtINR(t.totalTax)))+'<br>'+
+    '<b>Total: '+fmtINR(t.grand)+'</b>'+(q.zohoEstimateNumber?('<br>Zoho estimate: '+esc(q.zohoEstimateNumber)):'')+(q.paid?('<br><b>✅ Payment received: '+fmtINR(q.paidAmount)+' on '+esc(q.paidAt)+(q.paymentId?(' · '+esc(q.paymentId)):'')+' — Converted</b>'):'');
+}
+function extractId(r){try{const cands=[r&&r.results,r&&r.createdObjects,r&&r.objects,r&&r.data&&r.data.results,r&&r.data&&r.data.objects];for(const arr of cands){if(Array.isArray(arr)&&arr[0])return arr[0].id||arr[0].objectId||(arr[0].properties&&arr[0].properties.hs_object_id);}if(r&&(r.id||r.objectId))return r.id||r.objectId;}catch(e){}return null;}
+async function ensureHubspotContact(q){
+  const c=q.customer;
+  if(c.hubspotId)return c.hubspotId;
+  if(!c.email)return '';
+  try{const obj=await call(HUBSPOT+'__search_crm_objects',{objectType:'contacts',query:c.email,limit:5,properties:['email','firstname','lastname'],chatInsights:{userIntent:'Link customer to HubSpot for quote sync',satisfaction:'NEUTRAL'}});
+    const res=(obj&&obj.results)||(obj&&obj.data&&obj.data.results)||[];const el=String(c.email).toLowerCase();
+    const f=res.find(r=>String((r.properties||{}).email||'').toLowerCase()===el);
+    if(f){c.hubspotId=String(f.id);return c.hubspotId;}}catch(e){}
+  try{const parts=String(c.name||'').trim().split(/\s+/);const fn=parts.shift()||(c.name||'Customer');const ln=parts.join(' ');
+    const props={email:c.email};if(fn)props.firstname=fn;if(ln)props.lastname=ln;if(c.phone)props.phone=c.phone;
+    const r=await call(HUBSPOT+'__manage_crm_objects',{confirmationStatus:'CONFIRMED',createRequest:{objects:[{objectType:'contacts',properties:props}]}});
+    const id=extractId(r);if(id){c.hubspotId=String(id);return c.hubspotId;}}catch(e){}
+  return '';
+}
+async function pushToHubspotNote(q){
+  const cid=q.customer.hubspotId;if(!cid)throw new Error('no linked contact');
+  const body=noteBodyHtml(q);
+  if(q.hubspotNoteId){
+    await call(HUBSPOT+'__manage_crm_objects',{confirmationStatus:'CONFIRMED',updateRequest:{objects:[{objectType:'notes',objectId:Number(q.hubspotNoteId),properties:{hs_note_body:body,hs_timestamp:String(Date.now())}}]}});
+  }else{
+    const r=await call(HUBSPOT+'__manage_crm_objects',{confirmationStatus:'CONFIRMED',createRequest:{objects:[{objectType:'notes',properties:{hs_note_body:body,hs_timestamp:String(Date.now())},associations:[{targetObjectId:Number(cid),targetObjectType:'contacts'}]}]}});
+    const id=extractId(r);if(id)q.hubspotNoteId=String(id);
+  }
+}
+function setSync(m,busy){const el=$('syncStatus');if(!el)return;el.textContent=m;el.style.color=busy?'var(--brand)':(/✗/.test(m)?'var(--danger)':'var(--ok)');}
+async function syncExternal(opts){
+  if(STATE.syncing)return;STATE.syncing=true;
+  syncStateFromForm();
+  if(!STATE.cur.number){STATE.cur.number=nextNumber();$('quoteNumber').value=STATE.cur.number;}
+  STATE.cur.saved=true;
+  setSync('Syncing…',true);
+  const out=[];
+  if(opts.hubspot){
+    const hid=await ensureHubspotContact(STATE.cur);
+    if(hid){try{await pushToHubspotNote(STATE.cur);out.push('HubSpot ✓');}catch(e){out.push('HubSpot ✗ '+e.message);}}
+    else out.push('HubSpot skipped — add a customer email to link/create the lead');
+  }
+  if(opts.zoho){
+    if(!STATE.cur.lines.length)out.push('Zoho skipped — add a plan or service first');
+    else{try{await pushToZoho(STATE.cur,!!opts.sent);out.push('Zoho '+(STATE.cur.zohoEstimateNumber||'')+' '+(STATE.cur.zohoStatus==='sent'?'(Sent)':(STATE.cur.zohoStatus==='paid'?'(Paid)':'(Draft)'))+' ✓');}catch(e){out.push('Zoho ✗ '+e.message);}}
+  }
+  persistCur();refreshQuoteSelect();render();
+  const msg=out.join('  ·  ');setSync(msg,false);
+  if(!opts.silent&&msg)flash(msg,/✗/.test(msg));
+  STATE.syncing=false;
+}
+/* ---------- Razorpay payment link + reconciliation ---------- */
+function copyPayLink(){
+  const u=STATE.cur.zohoEstimateUrl;
+  if(!u){flash('Save or Send to Zoho first — that generates the payment link.',true);return;}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(u).then(function(){flash('Payment link copied — customer pays via Razorpay on the Zoho page.');},function(){window.open(u,'_blank');});}
+  else window.open(u,'_blank');
+}
+async function markPaid(q,p){
+  q.paid=true;q.paymentId=p.id||'';q.paidAmount=(Number(p.amount)||0)/100;q.paidAt=new Date((Number(p.created_at)||Date.now()/1000)*1000).toISOString().slice(0,10);q.zohoStatus='paid';
+  try{await ensureHubspotContact(q);}catch(e){}
+  try{await pushToHubspotNote(q);}catch(e){}
+  if(q.customer.hubspotId){try{await call(HUBSPOT+'__manage_crm_objects',{confirmationStatus:'CONFIRMED',updateRequest:{objects:[{objectType:'contacts',objectId:Number(q.customer.hubspotId),properties:{hs_lead_status:'CONVERTED',lifecyclestage:'customer'}}]}});}catch(e){}}
+  persistCur();refreshQuoteSelect();render();
+  setSync('✅ Payment '+fmtINR(q.paidAmount)+' ('+(p.id||'')+') — HubSpot lead set to CONVERTED.',false);
+  flash('Payment received — quote marked Paid and HubSpot lead set to CONVERTED.');
+}
+async function checkPayment(q){
+  const t=compute(q),paise=Math.round(t.grand*100);
+  if(paise<=0){flash('Add items first.',true);return;}
+  setSync('Checking Razorpay for '+fmtINR(t.grand)+'…',true);
+  try{
+    const fromTs=Math.floor(new Date((q.date||todayISO())+'T00:00:00').getTime()/1000)-86400;
+    const obj=await call(RAZORPAY+'__fetch_all_payments',{count:100,from:fromTs});
+    const items=(obj&&obj.items)||(obj&&obj.data&&obj.data.items)||[];
+    const phone=String(q.customer.phone||'').replace(/\D/g,'').slice(-10);
+    const email=String(q.customer.email||'').toLowerCase();
+    const cands=items.filter(p=>(p.status==='captured'||p.captured===true)&&Number(p.amount)===paise);
+    let m=null;
+    if(phone)m=cands.find(p=>String(p.contact||'').replace(/\D/g,'').slice(-10)===phone);
+    if(!m&&email)m=cands.find(p=>String(p.email||'').toLowerCase()===email);
+    m=m||cands[0];
+    if(m)await markPaid(q,m);
+    else setSync('No captured Razorpay payment of '+fmtINR(t.grand)+' found yet.',false);
+  }catch(e){setSync('⚠ Razorpay: '+e.message,false);}
+}
+
+/* ---------- form sync ---------- */
+function syncFormFromState(){
+  const q=STATE.cur,c=q.customer;
+  $('custName').value=c.name;$('propertyName').value=c.propertyName;$('custEmail').value=c.email;$('custPhone').value=c.phone;
+  $('roomCount').value=c.roomCount;$('custCity').value=c.city;$('custState').value=c.state;$('pincode').value=c.pincode||'';$('custGstin').value=c.gstin;$('taxMode').value=q.taxMode;
+  $('quoteNumber').value=q.number;$('quoteDate').value=q.date;$('validUntil').value=q.validUntil;$('pocName').value=q.poc||'';$('subject').value=q.subject||'';
+  $('couponSelect').value=q.coupon?q.coupon.code:'';
+  $('notes').value=q.notes;$('terms').value=q.terms;renderLines();
+}
+function syncStateFromForm(){
+  const q=STATE.cur,c=q.customer;
+  c.name=$('custName').value;c.propertyName=$('propertyName').value;c.email=$('custEmail').value;c.phone=$('custPhone').value;
+  c.roomCount=$('roomCount').value===''?'':Number($('roomCount').value);c.city=$('custCity').value;c.state=$('custState').value;c.pincode=$('pincode').value;c.gstin=$('custGstin').value;q.taxMode=$('taxMode').value;
+  q.number=$('quoteNumber').value;q.date=$('quoteDate').value;q.validUntil=$('validUntil').value;q.poc=$('pocName').value;q.subject=$('subject').value;
+  q.notes=$('notes').value;q.terms=$('terms').value;
+  if(q.poc)localStorage.setItem(POC_KEY,q.poc);
+}
+function markDirty(){STATE.dirty=true;$('dirtyFlag').textContent='unsaved';$('dirtyFlag').className='pill';}
+function clearDirty(){STATE.dirty=false;$('dirtyFlag').textContent='saved';$('dirtyFlag').className='pill gray';}
+
+function refreshQuoteSelect(){const dd=$('quoteResults');if(dd&&dd.classList.contains('show'))renderQuoteResults($('quoteSearch')?$('quoteSearch').value.trim():'');}
+let quoteSearchTimer=null;
+function onQuoteSearch(){clearTimeout(quoteSearchTimer);const q=$('quoteSearch').value.trim();quoteSearchTimer=setTimeout(()=>renderQuoteResults(q),120);}
+function renderQuoteResults(q){
+  const dd=$('quoteResults');if(!dd)return;const term=String(q||'').toLowerCase();
+  let list=STATE.db.quotes.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(term)list=list.filter(x=>{const c=x.customer||{};return String(c.name||'').toLowerCase().indexOf(term)>=0||String(c.propertyName||'').toLowerCase().indexOf(term)>=0||String(x.number||'').toLowerCase().indexOf(term)>=0;});
+  dd.innerHTML='';
+  if(!list.length){dd.innerHTML='<div class="opt"><span class="meta">'+(STATE.db.quotes.length?'No matching saved quotes':'No saved quotes yet')+'</span></div>';dd.className='dropdown show';return;}
+  list.slice(0,15).forEach(x=>{const c=x.customer||{};const div=document.createElement('div');div.className='opt';
+    div.innerHTML='<div class="nm">'+esc(c.name||'—')+(c.propertyName?(' <span class="hint">· '+esc(c.propertyName)+'</span>'):'')+'</div><div class="meta">'+esc(x.number||'unsaved')+' · '+esc(x.date||'')+' · '+fmtINR(compute(x).grand)+(x.zohoStatus?(' · '+esc(x.zohoStatus)):'')+'</div>';
+    div.onclick=()=>{loadQuote(x.id);dd.className='dropdown';$('quoteSearch').value='';};
+    dd.appendChild(div);});
+  dd.className='dropdown show';
+}
+function newQuote(){STATE.cur=blankQuote();syncFormFromState();computeStep();renderWizard();render();clearDirty();refreshQuoteSelect();checkPriceDrift();$('zohoMatchInfo').textContent='';renderCoupons();}
+function saveQuote(){syncStateFromForm();if(!STATE.cur.number){STATE.cur.number=nextNumber();$('quoteNumber').value=STATE.cur.number;}STATE.cur.saved=true;
+  persistCur();clearDirty();refreshQuoteSelect();
+  if(!STATE.cur.lines.length){flash('Saved '+STATE.cur.number+'.');return;}
+  // Every save pushes to Zoho in real time (creates a draft, or updates the existing estimate). HubSpot note is optional.
+  const hs=$('syncOnSave')?$('syncOnSave').checked:true;
+  syncExternal({zoho:true,hubspot:hs,sent:false});}
+function loadQuote(id){const q=STATE.db.quotes.find(x=>x.id===id);if(!q)return;STATE.cur=JSON.parse(JSON.stringify(q));(STATE.cur.lines||[]).forEach(l=>{if(l._open===undefined)l._open=false;if(!l.kind)l.kind=l.itemId?'book':'custom';});syncFormFromState();computeStep();renderWizard();render();clearDirty();checkPriceDrift();renderCoupons();$('zohoMatchInfo').textContent=STATE.cur.customer.zohoId?'🔗 Linked to a Zoho customer.':'';}
+function duplicateQuote(){syncStateFromForm();const c=JSON.parse(JSON.stringify(STATE.cur));c.id=uid();c.number='';c.saved=false;c.date=todayISO();c.validUntil=addDays(todayISO(),15);STATE.cur=c;syncFormFromState();computeStep();renderWizard();render();markDirty();refreshQuoteSelect();flash('Duplicated — save to assign a new number.');}
+function deleteQuote(){if(!STATE.cur.saved){newQuote();return;}if(!confirm('Delete quote '+STATE.cur.number+'?'))return;STATE.db.quotes=STATE.db.quotes.filter(x=>x.id!==STATE.cur.id);saveDB();newQuote();flash('Deleted.');}
+let flashTimer=null;
+function flash(msg,bad){const b=$('statusBanner');b.innerHTML=esc(msg).replace('&amp;','&');b.style.background=bad?'#fef2f2':'#ecfdf5';b.style.color=bad?'#991b1b':'#065f46';b.style.borderColor=bad?'#fecaca':'#a7f3d0';b.className='banner show';clearTimeout(flashTimer);flashTimer=setTimeout(()=>{b.className='banner';},4200);}
+
+/* ---------- wire up ---------- */
+function applyDiscVisibility(){const on=!!STATE.hideDisc;if($('discBody'))$('discBody').style.display=on?'none':'';if($('discHidden'))$('discHidden').style.display=on?'':'none';if($('hideDiscBtn'))$('hideDiscBtn').textContent=on?'👁 Show':'🙈 Hide';}
+function toggleHideDisc(v){STATE.hideDisc=(v===undefined)?!STATE.hideDisc:v;localStorage.setItem('digistay_hidedisc',STATE.hideDisc?'1':'0');applyDiscVisibility();render();}
+function bindForm(){
+  STATE.hideDisc=localStorage.getItem('digistay_hidedisc')==='1';
+  $('hideDiscBtn').onclick=()=>toggleHideDisc();
+  {const sdl=$('showDiscLink');if(sdl)sdl.onclick=(e)=>{e.preventDefault();toggleHideDisc(false);};}
+  applyDiscVisibility();
+  ['custName','propertyName','custEmail','custPhone','roomCount','custCity','custGstin','taxMode','quoteNumber','quoteDate','validUntil','pocName','subject','notes','terms']
+   .forEach(id=>{const el=$(id);const ev=(el.tagName==='SELECT')?'change':'input';el.addEventListener(ev,()=>{syncStateFromForm();markDirty();render();});});
+  $('custState').addEventListener('input',()=>{STATE.cur.customer.state=$('custState').value;STATE.cur._pinState=false;markDirty();resolveTax();});
+  $('pincode').addEventListener('input',()=>{STATE.cur.customer.pincode=$('pincode').value;markDirty();resolveTax();});
+  $('roomCount').addEventListener('input',()=>{STATE.cur.customer.roomCount=$('roomCount').value===''?'':Number($('roomCount').value);syncRoomLicense();renderWizard();renderLines();markDirty();render();});
+  $('couponSelect').addEventListener('change',e=>applyCoupon(e.target.value));
+  $('custSearch').addEventListener('input',onCustSearch);
+  document.addEventListener('click',e=>{if(!$('custResults').contains(e.target)&&e.target!==$('custSearch'))$('custResults').className='dropdown';});
+  $('zohoMatchBtn').onclick=matchZoho;
+  $('rebuildBtn').onclick=()=>buildCatalog(true);
+  $('newBtn').onclick=()=>{if(STATE.dirty&&!confirm('Discard unsaved changes?'))return;newQuote();};
+  $('saveBtn').onclick=saveQuote;$('dupBtn').onclick=duplicateQuote;
+  $('delBtn').onclick=()=>flash('Deletion is locked here — quotations can only be deleted in Zoho by an admin with delete access.',true);
+  $('pdfBtn').onclick=()=>window.print();$('emailBtn').onclick=emailQuote;
+  $('quoteSearch').addEventListener('input',onQuoteSearch);
+  $('quoteSearch').addEventListener('focus',()=>renderQuoteResults($('quoteSearch').value.trim()));
+  document.addEventListener('click',e=>{if($('quoteResults')&&!$('quoteResults').contains(e.target)&&e.target!==$('quoteSearch'))$('quoteResults').className='dropdown';});
+  $('saveSellerBtn').onclick=saveSeller;
+  $('syncNowBtn').onclick=()=>syncExternal({zoho:true,hubspot:true,sent:false});
+  $('payLinkBtn').onclick=copyPayLink;
+  $('checkPayBtn').onclick=()=>checkPayment(STATE.cur);
+  const so=$('syncOnSave');if(so){so.checked=localStorage.getItem('digistay_synconsave')!=='0';so.onchange=()=>localStorage.setItem('digistay_synconsave',so.checked?'1':'0');}
+  $('logoClear').onclick=()=>{STATE.seller.logo='';localStorage.setItem(SELLER_KEY,JSON.stringify(STATE.seller));renderLogoPreview();render();};
+  $('logoFile').onchange=e=>{const f=e.target.files&&e.target.files[0];if(!f)return;if(f.size>1.8e6){flash('Logo too large (max ~1.5MB).',true);return;}const fr=new FileReader();fr.onload=()=>{STATE.seller.logo=fr.result;localStorage.setItem(SELLER_KEY,JSON.stringify(STATE.seller));renderLogoPreview();render();flash('Logo saved.');};fr.readAsDataURL(f);};
+}
+function fillSellerForm(){const s=STATE.seller;$('sellerName').value=s.name;$('sellerGstin').value=s.gstin;$('sellerAddress').value=s.address;$('sellerState').value=s.state;$('sellerEmail').value=s.email;$('sellerPhone').value=s.phone;renderLogoPreview();}
+
+/* ---------- POC sign-in (email + live HubSpot/Zoho identity check) ---------- */
+function loadUser(){try{const r=localStorage.getItem(USER_KEY);if(r)STATE.user=JSON.parse(r);}catch(e){}}
+function saveUser(u){STATE.user=u;try{localStorage.setItem(USER_KEY,JSON.stringify(u));}catch(e){}}
+function applyUserToUI(){
+  const w=$('whoami');
+  if(w&&STATE.user){w.textContent='👤 '+(STATE.user.name||STATE.user.email);w.title='Verified via your HubSpot login · '+(STATE.user.email||'');w.style.display='';w.onclick=gateStart;}
+  else if(w){w.style.display='none';}
+  if(STATE.user&&STATE.user.name){
+    localStorage.setItem(POC_KEY,STATE.user.name);
+    window.__DONUT_POC=STATE.user.name;
+    if(STATE.cur&&!STATE.cur.saved){STATE.cur.poc=STATE.user.name;if($('pocName'))$('pocName').value=STATE.user.name;render();}
+  }
+}
+function buildSigninOverlay(){
+  if($('signinOverlay'))return;
+  const ov=document.createElement('div');ov.id='signinOverlay';
+  ov.innerHTML='<div id="signinCard">'+
+    '<h2>🍩 Donut</h2>'+
+    '<div class="sub">Donut signs you in automatically through <b>your own HubSpot &amp; Zoho login</b>. Only your DigiStay account can open it — there is nothing to type and no shared password, so no one can open it as another POC.</div>'+
+    '<div id="signinMsg" class="hint">Verifying your DigiStay account…</div>'+
+    '<button id="signinRetry" class="primary" style="width:100%;margin-top:14px;display:none">Retry</button>'+
+  '</div>';
+  document.body.appendChild(ov);
+  $('signinRetry').onclick=gateStart;
+}
+function showSignin(){buildSigninOverlay();$('signinOverlay').style.display='flex';}
+function hideSignin(){const o=$('signinOverlay');if(o)o.style.display='none';}
+function signinMsg(m,bad){const el=$('signinMsg');if(el){el.textContent=m||'';el.style.color=bad?'var(--danger)':'var(--muted)';}}
+// Identity is read from the signed-in HubSpot account (get_user_details) — it reflects whoever authorized
+// the connector and cannot be changed by typing a different email, so no POC can open Donut as another.
+async function verifyIdentity(){
+  let hs;
+  try{hs=await call(HUBSPOT+'__get_user_details',{include:['USER_INFORMATION']});}
+  catch(e){return {ok:false,reason:'hubspot'};}
+  const ui=(hs&&hs.userInformation)||(hs&&hs.data&&hs.data.userInformation)||{};
+  const email=String(ui.email||'').trim().toLowerCase();
+  const name=((ui.firstName||'')+' '+(ui.lastName||'')).trim()||email;
+  if(!email)return {ok:false,reason:'noemail'};
+  if(!/^[^@\s]+@digistay\.ai$/.test(email))return {ok:false,reason:'domain',email:email};
+  try{await call(ZOHO+'__list_estimates',{query_params:{organization_id:ORG,per_page:1}});}
+  catch(e){return {ok:false,reason:'zoho',email:email,name:name,ownerId:String(ui.ownerId||'')};}
+  return {ok:true,email:email,name:name,ownerId:String(ui.ownerId||'')};
+}
+async function gateStart(){
+  buildSigninOverlay();$('signinOverlay').style.display='flex';
+  const rt=$('signinRetry');if(rt)rt.style.display='none';
+  signinMsg('Verifying your DigiStay account…');
+  const r=await verifyIdentity();
+  if(r.ok){saveUser({email:r.email,name:r.name,ownerId:r.ownerId,at:Date.now()});hideSignin();applyUserToUI();flash('Signed in as '+r.name+'.');startApp();return;}
+  if(r.reason==='hubspot')signinMsg('Connect your HubSpot connector in Cowork to use Donut, then tap Retry.',true);
+  else if(r.reason==='zoho')signinMsg('Your HubSpot is connected, but Zoho isn’t. Connect your Zoho (Zoho Billing) connector in Cowork, then tap Retry.',true);
+  else if(r.reason==='domain')signinMsg('Access restricted: '+r.email+' is not a digistay.ai account. Open Donut from a Cowork signed in to your @digistay.ai HubSpot account.',true);
+  else signinMsg('Couldn’t verify your account. Make sure HubSpot & Zoho are connected, then tap Retry.',true);
+  if(rt)rt.style.display='';
+}
+function signOut(){gateStart();}
+
+/* ---------- init ---------- */
+function startApp(){
+  if(STATE._appStarted)return;STATE._appStarted=true;
+  applyUserToUI();
+  fetchItems();
+  buildCatalog(false);
+  // Always-on sync: pick up new Zoho plans/add-ons/invoiced items shortly after load, then keep refreshing while open.
+  setTimeout(()=>refreshCatalogLive(),1500);
+  setInterval(()=>{if(document.visibilityState!=='hidden')refreshCatalogLive();},5*60*1000);
+}
+function init(){
+  if(!window.cowork||!window.cowork.callMcpTool){document.body.innerHTML='<p style="padding:20px">This page must run as a Cowork artifact (connector access unavailable).</p>';return;}
+  loadDB();loadSeller();fillSellerForm();bindForm();newQuote();
+  // Always verify identity from the live HubSpot connector on load — never trust a cached/edited login.
+  gateStart();
+}
+init();
+})();
+
+</script>
+<script>
+
+(function(){
+"use strict";
+const ZOHO='mcp__902e601b-7e82-446d-8ccc-4b7ce715944b';
+const ORG='60062278723';
+const ACCEPTED=['accepted','invoiced'];
+const DET_KEY='digistay_dash_detail_v3';
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const PAL=['#0f766e','#4f46e5','#f59e0b','#dc2626','#0891b2','#7c3aed','#16a34a'];
+const $=id=>document.getElementById(id);
+const fmtINR=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:0});
+const fmtINR2=n=>'₹'+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function fmtShort(v){v=Number(v)||0;const a=Math.abs(v);if(a>=1e7)return (v/1e7).toFixed(1)+'Cr';if(a>=1e5)return (v/1e5).toFixed(1)+'L';if(a>=1e3)return (v/1e3).toFixed(0)+'k';return String(Math.round(v));}
+let SUM=[],DETMAP={},INV=[],POCS=[],ITEMS=[],ORGM={},SORT={key:'accepted',dir:-1},momC=null,yoyC=null;
+let PERIOD='all',STATUSF='nondraft',METRIC='quoted',CFROM='',CTO='';
+let POCSEL=new Set();
+let TERM={quarter:{units:0,rev:0,n:0},year:{units:0,rev:0,n:0}},TERMITEMS=[];
+
+async function call(name,args){
+  const r=await window.cowork.callMcpTool(name,args);
+  if(r&&r.isError){const t=(r.content&&r.content[0]&&r.content[0].text)||'Tool error';throw new Error(t);}
+  let o=r?r.structuredContent:null;
+  if(o==null&&r&&r.content&&r.content[0]&&typeof r.content[0].text==='string'){try{o=JSON.parse(r.content[0].text);}catch(e){o=r.content[0].text;}}
+  return o;
+}
+function setStatus(m){$('status').textContent=m;}
+const sp=e=>String(e.salesperson_name||'').trim()||'(Unassigned)';
+const isAcc=s=>ACCEPTED.indexOf(String(s||'').toLowerCase())>=0;
+
+async function loadSummaries(){
+  setStatus('Loading quotations…');let all=[],page=1;
+  while(page<=10){
+    const le=await call(ZOHO+'__list_estimates',{query_params:{organization_id:ORG,per_page:200,page:page,sort_column:'created_time'}});
+    const arr=(le&&le.data&&le.data.estimates)||(le&&le.estimates)||[];all=all.concat(arr);
+    const pc=(le&&le.data&&le.data.page_context)||(le&&le.page_context)||{};
+    setStatus('Loading quotations… '+all.length);
+    if(!arr.length||pc.has_more_page===false||arr.length<200)break;page++;
+  }
+  SUM=all;populateYears();
+}
+const PERIOD_SCAN=700,DEFAULT_SCAN=300;
+function loadDetMap(){try{const c=JSON.parse(localStorage.getItem(DET_KEY)||'null');if(c&&c.map&&(Date.now()-c.at<2*864e5))DETMAP=c.map;}catch(e){}}
+function saveDetMap(){try{localStorage.setItem(DET_KEY,JSON.stringify({at:Date.now(),map:DETMAP}));}catch(e){}}
+function detRows(){return Object.keys(DETMAP).map(k=>DETMAP[k]);}
+// Which estimates need detail (discount/items): for a specific period scan ALL estimates in that
+// period (so older months like May are fully covered); for "All time" scan the recent window.
+function targetDetailIds(){const f=activeFilter();
+  if(PERIOD==='all'&&!f.from&&!f.to)return SUM.slice(0,DEFAULT_SCAN).map(e=>e.estimate_id);
+  return SUM.filter(e=>inFilter(e.date,f)).slice(0,PERIOD_SCAN).map(e=>e.estimate_id);}
+async function ensureDetails(){
+  const ids=targetDetailIds().filter(id=>!DETMAP[id]);
+  if(!ids.length)return;
+  let done=0;const B=10,total=ids.length;
+  for(let i=0;i<ids.length;i+=B){
+    await Promise.all(ids.slice(i,i+B).map(async id=>{
+      try{const ge=await call(ZOHO+'__get_estimate',{path_variables:{estimate_id:id},query_params:{organization_id:ORG}});
+        const e=(ge&&ge.data&&ge.data.estimate)||(ge&&ge.estimate);if(!e)return;
+        DETMAP[id]={sp:String(e.salesperson_name||'').trim()||'(Unassigned)',status:String(e.status||'').toLowerCase(),date:String(e.date||'').slice(0,10),
+          discount_total:Number(e.discount_total)||0,discount_percent:Number(e.discount_percent)||0,total:Number(e.total)||0,
+          lines:(e.line_items||[]).map(l=>({name:String(l.name||'Item').trim(),type:Number(l.type)||0,total:Number(l.item_total)||0,qty:Number(l.quantity)||0,unit:String(l.interval_unit||l.unit||''),interval:Number(l.interval)||0}))};
+      }catch(e){}
+      done++;setStatus('Scanning details for this period… '+done+'/'+total);
+    }));
+  }
+  saveDetMap();setStatus('Updated '+new Date().toLocaleString());
+}
+async function apply(){await ensureDetails();render();}
+
+function populateYears(){}
+function periodRange(){const now=new Date(),y=now.getFullYear(),m=now.getMonth();const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  if(PERIOD==='custom')return {from:CFROM||'',to:CTO||''};
+  if(PERIOD==='mtd')return {from:iso(new Date(y,m,1)),to:iso(new Date(y,m+1,0))};
+  if(PERIOD==='lastmonth')return {from:iso(new Date(y,m-1,1)),to:iso(new Date(y,m,0))};
+  if(PERIOD==='qtd'){const q=Math.floor(m/3)*3;return {from:iso(new Date(y,q,1)),to:iso(new Date(y,q+3,0))};}
+  if(PERIOD==='ytd')return {from:iso(new Date(y,0,1)),to:iso(new Date(y,11,31))};
+  return {from:'',to:''};}
+function activeFilter(){return periodRange();}
+function inFilter(dateStr,f){if(!dateStr)return false;const d=String(dateStr).slice(0,10);
+  if(f.from&&d<f.from)return false;if(f.to&&d>f.to)return false;return true;}
+function statusPass(s,mode){s=String(s||'').toLowerCase();mode=mode||'nondraft';
+  if(mode==='all')return true;if(mode==='nondraft')return s!=='draft';if(mode==='sent')return s==='sent';if(mode==='draft')return s==='draft';if(mode==='accepted')return ACCEPTED.indexOf(s)>=0;return true;}
+function statusLabel(){return ({nondraft:'Sent + Accepted',all:'All statuses',sent:'Sent only',accepted:'Accepted / Invoiced',draft:'Drafts only'})[STATUSF]||'';}
+function periodLabel(){if(PERIOD==='custom')return (CFROM||'…')+' → '+(CTO||'…');return ({mtd:'This month',lastmonth:'Last month',qtd:'This quarter',ytd:'This year',all:'All time'})[PERIOD]||'All time';}
+function pocPass(name){return POCSEL.size===0||POCSEL.has(name);}
+function updatePocClear(){const c=$('pocClear');if(c)c.style.display=POCSEL.size?'':'none';
+  const h=$('pocHint');if(h)h.textContent=POCSEL.size?('Comparing '+POCSEL.size+' selected POC'+(POCSEL.size>1?'s':'')):'Showing all POCs — tap names to compare just your team';}
+function buildPocChips(){
+  const box=$('pocChips');if(!box)return;
+  const names=Array.from(new Set(SUM.map(e=>sp(e)))).filter(Boolean).sort((a,b)=>a.localeCompare(b));
+  box.innerHTML=names.map(n=>'<button class="chip'+(POCSEL.has(n)?' on':'')+'" data-poc="'+esc(n)+'">'+esc(n)+'</button>').join('');
+  box.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{const n=b.getAttribute('data-poc');if(POCSEL.has(n)){POCSEL.delete(n);b.classList.remove('on');}else{POCSEL.add(n);b.classList.add('on');}updatePocClear();if(SUM.length)render();});
+  // "My team (me)" shortcut — selects the signed-in POC if present in the data
+  const mine=$('pocMine');
+  if(mine){const me=window.__DONUT_POC&&names.find(n=>n.trim().toLowerCase()===String(window.__DONUT_POC).trim().toLowerCase());
+    if(me){mine.style.display='';mine.onclick=()=>{POCSEL.clear();POCSEL.add(me);buildPocChips();updatePocClear();if(SUM.length)render();};}else{mine.style.display='none';}}
+  updatePocClear();
+}
+
+function termOf(l){const s=String(l.name||'').toLowerCase();
+  if(/year|annual/.test(s))return 'year';
+  if(/quarter|quater/.test(s))return 'quarter';
+  if(/month/.test(s))return '';
+  const u=String(l.unit||'').toLowerCase(),iv=Number(l.interval)||0;
+  if(u.indexOf('year')>=0)return 'year';
+  if(u.indexOf('month')>=0&&iv===3)return 'quarter';
+  if(u.indexOf('month')>=0&&iv>=12)return 'year';
+  return '';}
+function compute(){
+  const f=activeFilter();const st=STATUSF;
+  const FSUM=SUM.filter(e=>inFilter(e.date,f)&&statusPass(e.status,st)&&pocPass(sp(e)));
+  const FDET=detRows().filter(d=>inFilter(d.date,f)&&statusPass(d.status,st)&&pocPass(d.sp));
+  const P={};function poc(n){return P[n]||(P[n]={name:n,count:0,quoted:0,accepted:0,acceptedCount:0,custQ:{},custA:{},discSum:0,discPctSum:0,discCount:0,scanN:0});}
+  FSUM.forEach(e=>{const p=poc(sp(e));p.count++;p.quoted+=Number(e.total)||0;if(e.customer_id)p.custQ[e.customer_id]=1;
+    if(isAcc(e.status)){p.accepted+=Number(e.total)||0;p.acceptedCount++;if(e.customer_id)p.custA[e.customer_id]=1;}});
+  const items={},term={quarter:{units:0,rev:0,n:0},year:{units:0,rev:0,n:0}},termItems={};
+  FDET.forEach(d=>{const p=poc(d.sp);p.scanN++;p.discSum+=d.discount_total;
+    if(d.discount_percent>0){p.discPctSum+=d.discount_percent;p.discCount++;}
+    d.lines.forEach(l=>{if(!l.name)return;const k=l.name.toLowerCase();const it=items[k]||(items[k]={name:l.name,type:l.type,units:0,revenue:0,orders:0});
+      it.units+=l.qty;it.revenue+=l.total;it.orders++;if(l.type===1)it.type=1;else if(l.type===2&&it.type!==1)it.type=2;
+      if(l.type===1){const tm=termOf(l);if(tm){term[tm].units+=l.qty;term[tm].rev+=l.total;term[tm].n++;const tk=tm+'|'+k;const ti=termItems[tk]||(termItems[tk]={name:l.name,term:tm,units:0,revenue:0,orders:0});ti.units+=l.qty;ti.revenue+=l.total;ti.orders++;}}
+    });});
+  POCS=Object.values(P).map(p=>({name:p.name,count:p.count,quoted:p.quoted,accepted:p.accepted,custQ:Object.keys(p.custQ).length,custA:Object.keys(p.custA).length,
+    disc:p.discSum,avgDisc:p.discCount?p.discPctSum/p.discCount:0,discCount:p.discCount,aov:p.count?p.quoted/p.count:0,detN:p.scanN}));
+  ITEMS=Object.values(items).map(it=>({name:it.name,type:it.type,units:it.units,revenue:it.revenue,orders:it.orders,aov:it.orders?it.revenue/it.orders:0}));
+  TERM=term;TERMITEMS=Object.values(termItems);
+  const ddisc=FDET.filter(d=>d.discount_percent>0);
+  ORGM={count:FSUM.length,quoted:POCS.reduce((a,p)=>a+p.quoted,0),accepted:POCS.reduce((a,p)=>a+p.accepted,0),
+    custA:Object.keys(FSUM.filter(e=>isAcc(e.status)).reduce((m,e)=>{if(e.customer_id)m[e.customer_id]=1;return m;},{})).length,
+    custQ:Object.keys(FSUM.reduce((m,e)=>{if(e.customer_id)m[e.customer_id]=1;return m;},{})).length,
+    disc:POCS.reduce((a,p)=>a+p.disc,0),avgDisc:ddisc.length?ddisc.reduce((a,d)=>a+d.discount_percent,0)/ddisc.length:0,discCount:ddisc.length,detN:FDET.length};
+  ORGM.aov=ORGM.count?ORGM.quoted/ORGM.count:0;
+}
+
+function orgCards(){const m=ORGM;const c=[['Quotations',String(m.count),''],['Quoted value',fmtINR(m.quoted),''],['Accepted / invoiced',fmtINR(m.accepted),'value won'],
+  ['Customers acquired',String(m.custA),m.custQ+' quoted'],['Total discount',fmtINR(m.disc),'over '+m.detN+' scanned'],['Avg discount %',m.avgDisc.toFixed(1)+'%','on '+m.discCount+' discounted quotes'],['AOV',fmtINR(m.aov),'per quotation']];
+  $('orgCards').innerHTML=c.map(x=>'<div class="kpi"><div class="l">'+esc(x[0])+'</div><div class="v">'+esc(x[1])+'</div><div class="s">'+esc(x[2])+'</div></div>').join('');}
+function rankCards(){const medal='🥇';
+  function top(arr,val,asc){return arr.slice().filter(p=>p.count>0).sort((a,b)=>asc?(val(a)-val(b)):(val(b)-val(a)));}
+  function card(title,arr,fmt){const w=arr[0];if(!w)return '<div class="rank"><div class="t">'+title+'</div><div class="w">—</div></div>';
+    return '<div class="rank"><div class="t">'+title+'</div><div class="w">'+medal+' '+esc(w.name)+' · '+fmt(w)+'</div><ol>'+arr.slice(1,4).map(p=>'<li>'+esc(p.name)+' · '+fmt(p)+'</li>').join('')+'</ol></div>';}
+  $('rankCards').innerHTML=card('Most customers acquired',top(POCS,p=>p.custA),p=>p.custA+' cust')+
+    card('Highest sales (accepted)',top(POCS,p=>p.accepted),p=>fmtINR(p.accepted))+
+    card('Highest AOV',top(POCS,p=>p.aov),p=>fmtINR(p.aov))+
+    card('Lowest avg discount',top(POCS.filter(p=>p.detN>0),p=>p.avgDisc,true),p=>p.avgDisc.toFixed(1)+'%');}
+function pocTable(){
+  const cols=[['name','POC'],['count','Quotes'],['quoted','Quoted ₹'],['accepted','Accepted ₹'],['aov','AOV ₹'],['custA','Customers'],['disc','Discount ₹'],['avgDisc','Avg disc %']];
+  const rows=POCS.slice().sort((a,b)=>{const k=SORT.key,va=a[k],vb=b[k];if(typeof va==='string')return SORT.dir*va.localeCompare(vb);return SORT.dir*(va-vb);});
+  const maxAcc=Math.max(1,...rows.map(r=>r.accepted));
+  $('pocTable').querySelector('thead').innerHTML='<tr>'+cols.map(c=>'<th data-k="'+c[0]+'">'+c[1]+(SORT.key===c[0]?(SORT.dir<0?' ▾':' ▴'):'')+'</th>').join('')+'</tr>';
+  $('pocTable').querySelector('tbody').innerHTML=rows.map(function(r){var me=window.__DONUT_POC&&String(r.name||'').trim().toLowerCase()===String(window.__DONUT_POC).trim().toLowerCase();return '<tr'+(me?' style="background:#eaf2ff;font-weight:600"':'')+'><td>'+(me?'★ ':'')+esc(r.name)+'</td><td>'+r.count+'</td><td>'+fmtINR(r.quoted)+'</td>'+
+    '<td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*r.accepted/maxAcc)+'px"></span><span>'+fmtINR(r.accepted)+'</span></div></td>'+
+    '<td>'+fmtINR(r.aov)+'</td><td>'+r.custA+'</td><td>'+fmtINR(r.disc)+'</td><td>'+(r.discCount?r.avgDisc.toFixed(1)+'%':'—')+'</td></tr>';}).join('')||'<tr><td colspan="8" class="empty">No quotations in this period</td></tr>';
+  $('pocTable').querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(SORT.key===k)SORT.dir*=-1;else{SORT.key=k;SORT.dir=-1;}pocTable();});}
+function itemTable(elId,arr){
+  if(!arr.length){$(elId).querySelector('thead').innerHTML='';$(elId).querySelector('tbody').innerHTML='<tr><td class="empty">No items in scanned window / period</td></tr>';return;}
+  const sorted=arr.slice().sort((a,b)=>b.revenue-a.revenue);const max=Math.max(1,...sorted.map(r=>r.revenue));
+  $(elId).querySelector('thead').innerHTML='<tr><th>Item</th><th>Units</th><th>Times</th><th>Revenue ₹</th></tr>';
+  const row=r=>'<tr><td>'+esc(r.name)+'</td><td>'+r.units+'</td><td>'+r.orders+'</td><td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*r.revenue/max)+'px"></span><span>'+fmtINR(r.revenue)+'</span></div></td></tr>';
+  let html='<tr><td colspan="4" style="text-align:left;color:var(--ok);font-weight:600">▲ Best selling</td></tr>'+sorted.slice(0,5).map(row).join('');
+  if(sorted.length>5)html+='<tr><td colspan="4" style="text-align:left;color:var(--warn);font-weight:600">▼ Least selling</td></tr>'+sorted.slice(-3).reverse().map(row).join('');
+  $(elId).querySelector('tbody').innerHTML=html;}
+function aovTable(){const sorted=ITEMS.slice().sort((a,b)=>b.aov-a.aov);
+  $('aovTable').querySelector('thead').innerHTML='<tr><th>Item</th><th>Type</th><th>Avg / quote ₹</th><th>Units</th><th>Revenue ₹</th></tr>';
+  $('aovTable').querySelector('tbody').innerHTML=sorted.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+(r.type===1?'Plan':(r.type===2?'Add-on':'Service'))+'</td><td>'+fmtINR2(r.aov)+'</td><td>'+r.units+'</td><td>'+fmtINR(r.revenue)+'</td></tr>').join('')||'<tr><td colspan="5" class="empty">No data</td></tr>';}
+
+function monthlyBuckets(){const st=STATUSF;const m={};SUM.forEach(e=>{if(!statusPass(e.status,st)||!pocPass(sp(e)))return;const ym=String(e.date||'').slice(0,7);if(ym.length<7)return;const b=m[ym]||(m[ym]={quoted:0,accepted:0,count:0});b.quoted+=Number(e.total)||0;b.count++;if(isAcc(e.status))b.accepted+=Number(e.total)||0;});return m;}
+function makeChart(id,type,labels,datasets,money,prev){
+  if(typeof Chart==='undefined')return null;if(prev){try{prev.destroy();}catch(e){}}
+  return new Chart(document.getElementById(id),{type:type,data:{labels:labels,datasets:datasets},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:datasets.length>1,labels:{boxWidth:12,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>c.dataset.label+': '+(money?fmtINR(c.parsed.y):c.parsed.y)}}},
+      scales:{y:{beginAtZero:true,ticks:{callback:v=>money?fmtShort(v):v,font:{size:11}}},x:{ticks:{font:{size:11}}}}}});
+}
+function renderCharts(){var __vd=document.getElementById('view-dashboard');if(__vd&&__vd.style.display==='none')return;
+  if(typeof Chart==='undefined')return;
+  const metric=METRIC,money=metric!=='count',mAll=monthlyBuckets();
+  const mlabel=({quoted:'Quoted value',accepted:'Accepted value',count:'Quotations'})[metric]||metric;
+  const keys=Object.keys(mAll).sort().slice(-12);
+  const labels=keys.map(k=>{const p=k.split('-');return MONTHS[+p[1]-1]+" '"+p[0].slice(2);});
+  const data=keys.map(k=>mAll[k][metric]);
+  $('momScope').textContent='· last '+(keys.length||0)+' months';
+  momC=makeChart('momChart','bar',labels,[{label:mlabel,data:data,backgroundColor:'#0f766e',borderRadius:4}],money,momC);
+  const years=Array.from(new Set(SUM.map(e=>String(e.date||'').slice(0,4)).filter(y=>/^\d{4}$/.test(y)))).sort();
+  const ds=years.map((y,idx)=>({label:y,data:MONTHS.map((_,i)=>{const k=y+'-'+String(i+1).padStart(2,'0');return mAll[k]?mAll[k][metric]:0;}),borderColor:PAL[idx%PAL.length],backgroundColor:PAL[idx%PAL.length],tension:.3,fill:false,pointRadius:2}));
+  yoyC=makeChart('yoyChart','line',MONTHS,ds,money,yoyC);
+}
+
+/* ---------- Receivables: invoiced but not realized ---------- */
+async function loadInvoices(){
+  let all=[],page=1;
+  while(page<=10){
+    setStatus('Loading invoices… '+all.length);
+    const r=await call(ZOHO+'__list_invoices',{query_params:{organization_id:ORG,per_page:200,page:page,sort_column:'created_time'}});
+    const arr=(r&&r.data&&r.data.invoices)||(r&&r.invoices)||[];all=all.concat(arr);
+    const pc=(r&&r.data&&r.data.page_context)||(r&&r.page_context)||{};
+    if(!arr.length||pc.has_more_page===false||arr.length<200)break;page++;
+  }
+  INV=all;
+}
+function invPoc(v){return String(v.salesperson_name||'').trim()||String(v.created_by||'').trim()||'(Unassigned)';}
+function dueTable(){
+  const f=activeFilter();
+  let rows=INV.filter(v=>{const bal=Number(v.balance)||0,st=String(v.status||'').toLowerCase();
+    return bal>0&&st!=='void'&&st!=='draft'&&inFilter(v.date,f)&&pocPass(invPoc(v));});
+  rows.sort((a,b)=>(Number(b.balance)||0)-(Number(a.balance)||0));
+  const totDue=rows.reduce((a,v)=>a+(Number(v.balance)||0),0),totInv=rows.reduce((a,v)=>a+(Number(v.total)||0),0);
+  const partial=rows.filter(v=>(Number(v.balance)||0)<(Number(v.total)||0)).length;
+  $('dueCards').innerHTML=[['Outstanding due',fmtINR(totDue),rows.length+' open invoices'],['Invoiced (open)',fmtINR(totInv),'gross billed'],['Partially paid',String(partial),'of '+rows.length+' open']]
+    .map(x=>'<div class="kpi"><div class="l">'+esc(x[0])+'</div><div class="v">'+esc(x[1])+'</div><div class="s">'+esc(x[2])+'</div></div>').join('');
+  $('dueTable').querySelector('thead').innerHTML='<tr><th>Client</th><th>POC</th><th>Invoice</th><th>Invoiced ₹</th><th>Received ₹</th><th>Due ₹</th><th>Status</th></tr>';
+  const maxDue=Math.max(1,...rows.map(v=>Number(v.balance)||0));
+  $('dueTable').querySelector('tbody').innerHTML=rows.slice(0,200).map(v=>{const tot=Number(v.total)||0,bal=Number(v.balance)||0,rec=tot-bal,st=String(v.status||'').toLowerCase();
+    const badge=st==='partially_paid'?'Partially paid':(st==='overdue'?'Overdue':(st==='sent'?'Unpaid':(st==='viewed'?'Unpaid (viewed)':st)));
+    return '<tr><td>'+esc(v.customer_name||'—')+'</td><td>'+esc(invPoc(v))+'</td><td>'+esc(v.invoice_number||'')+'</td><td>'+fmtINR(tot)+'</td><td>'+fmtINR(rec)+'</td>'+
+      '<td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*bal/maxDue)+'px;background:var(--danger)"></span><span><b>'+fmtINR(bal)+'</b></span></div></td><td>'+esc(badge)+'</td></tr>';}).join('')
+    ||'<tr><td colspan="7" class="empty">No outstanding invoices in this period</td></tr>';
+  $('dueScope').textContent='· '+periodLabel()+(POCSEL.size?(' · '+POCSEL.size+' POC'):'');
+  $('dueNote').textContent='From Zoho invoices with an unpaid balance. Due = invoice balance · Received = total − balance. Filtered by invoice date (period) and selected POCs. Drafts & voided excluded.';
+}
+/* ---------- Quarterly vs Yearly plans ---------- */
+function termCards(){const q=TERM.quarter,y=TERM.year;
+  $('termCards').innerHTML=[['Quarterly plans sold',String(q.units),fmtINR(q.rev)+' revenue'],['Yearly plans sold',String(y.units),fmtINR(y.rev)+' revenue'],['Higher seller',(q.units===y.units?'—':(q.units>y.units?'Quarterly':'Yearly')),'by units sold']]
+    .map(x=>'<div class="kpi"><div class="l">'+esc(x[0])+'</div><div class="v">'+esc(x[1])+'</div><div class="s">'+esc(x[2])+'</div></div>').join('');}
+function termTable(elId,term){const arr=TERMITEMS.filter(t=>t.term===term).sort((a,b)=>b.units-a.units);
+  $(elId).querySelector('thead').innerHTML='<tr><th>Plan</th><th>Units</th><th>Revenue ₹</th></tr>';
+  $(elId).querySelector('tbody').innerHTML=arr.map((r,i)=>'<tr><td>'+(i===0?'▲ ':(i===arr.length-1&&arr.length>1?'▼ ':''))+esc(r.name)+'</td><td>'+r.units+'</td><td>'+fmtINR(r.revenue)+'</td></tr>').join('')||'<tr><td colspan="3" class="empty">No '+term+' plans in this period/scan</td></tr>';}
+function render(){
+  compute();orgCards();rankCards();pocTable();
+  itemTable('planTable',ITEMS.filter(i=>i.type===1));
+  itemTable('addonTable',ITEMS.filter(i=>i.type!==1));
+  aovTable();renderCharts();dueTable();termCards();termTable('termQTable','quarter');termTable('termYTable','year');
+  $('sumScope').textContent='· '+periodLabel()+' · '+statusLabel();
+  $('pocNote').textContent='AOV = quoted value ÷ quotations. Customers = distinct customers on accepted/invoiced quotes. Avg disc % is averaged over discounted quotes only. Click a column header to sort.';
+  $('caveat').innerHTML='Counts, value, AOV, customers and ranks use <b>all quotations in the selected period</b> (grouped by salesperson). Discount, plan/add-on, term and per-item figures use <b>'+detRows().length+' scanned quotations</b> — for a specific period every quote in that period is scanned (so older months like May are fully covered). Trends use every quotation. Outstanding payments come from Zoho invoices.';
+}
+async function build(force){
+  $('dashRebuild').disabled=true;
+  try{
+    if(force)DETMAP={};
+    if(!SUM.length)await loadSummaries();
+    buildPocChips();render();
+    if(!INV.length||force)await loadInvoices();
+    await ensureDetails();render();
+    setStatus('Updated '+new Date().toLocaleString());
+  }catch(e){setStatus('⚠ '+e.message);}
+  $('dashRebuild').disabled=false;
+}
+function init(){
+  if(!window.cowork||!window.cowork.callMcpTool){document.body.innerHTML='<p style="padding:20px">This page must run as a Cowork artifact.</p>';return;}
+  loadDetMap();
+  $('dashRebuild').onclick=()=>build(true);
+  function wireChips(cid,attr,set,scan){const c=$(cid);if(!c)return;c.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{c.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));b.classList.add('on');set(b.getAttribute('data-'+attr));if(!SUM.length)return;if(scan)apply();else render();});}
+  wireChips('periodChips','p',function(v){PERIOD=v;CFROM='';CTO='';if($('fFrom'))$('fFrom').value='';if($('fTo'))$('fTo').value='';},true);
+  wireChips('statusChips','s',function(v){STATUSF=v;},false);
+  wireChips('metricChips','m',function(v){METRIC=v;},false);
+  // Pick From, it auto-opens To; filtering applies only on Apply.
+  $('fFrom').addEventListener('change',function(){if($('fFrom').value){try{$('fTo').focus();if($('fTo').showPicker)$('fTo').showPicker();}catch(e){}}});
+  $('fApply').onclick=function(){CFROM=$('fFrom').value||'';CTO=$('fTo').value||'';var pc=$('periodChips');pc.querySelectorAll('.chip').forEach(function(x){x.classList.remove('on');});
+    if(CFROM||CTO){PERIOD='custom';}else{PERIOD='all';var a=pc.querySelector('[data-p="all"]');if(a)a.classList.add('on');}
+    apply();};
+  $('pocClear').onclick=function(){POCSEL.clear();var box=$('pocChips');if(box)box.querySelectorAll('.chip').forEach(function(x){x.classList.remove('on');});updatePocClear();if(SUM.length)render();};
+  window.__dashOnShow=function(){if(window.__dashStarted){try{renderCharts();}catch(_){}return;}window.__dashStarted=true;build(false);};
+}
+init();
+})();
+
+</script>
+<script>
+(function(){function show(v){document.getElementById("view-builder").style.display=v==="builder"?"":"none";document.getElementById("view-dashboard").style.display=v==="dashboard"?"":"none";var t=document.querySelectorAll(".navtab");for(var i=0;i<t.length;i++)t[i].classList.toggle("active",t[i].dataset.view===v);if(v==="dashboard"&&window.__dashOnShow)window.__dashOnShow();window.scrollTo(0,0);}var t=document.querySelectorAll(".navtab");for(var i=0;i<t.length;i++)t[i].onclick=(function(b){return function(){show(b.dataset.view);};})(t[i]);})();
+</script>
+</body>
+</html>
