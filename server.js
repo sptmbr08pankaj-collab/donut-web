@@ -37,6 +37,7 @@ const HUBSPOT_PREFIX = "mcp__ebbfa203-0d0b-44fa-aae0-a87358d0fb66";
 const RAZORPAY_PREFIX = "mcp__f194d9b7-4a73-4b66-9f3b-87d17c296d4c";
 
 const ZOHO_API = `https://www.zohoapis.${ZOHO_DC}/books/v3`;
+const ZOHO_BILLING = `https://www.zohoapis.${ZOHO_DC}/billing/v1`;
 const ZOHO_ACCOUNTS = `https://accounts.zoho.${ZOHO_DC}`;
 
 const app = express();
@@ -105,7 +106,31 @@ async function zohoToken() {
   _ztok = { token: d.access_token, exp: Date.now() + (d.expires_in || 3600) * 1000 };
   return _ztok.token;
 }
+// Zoho Billing (Subscriptions) — plans/add-ons/coupons catalog. Uses the same OAuth
+// token (the refresh token must carry the ZohoSubscriptions scope) plus the org header.
+async function billing(op, args) {
+  const qp = args.query_params || {}, pv = args.path_variables || {};
+  let path = "", method = "GET";
+  switch (op) {
+    case "list_plans": path = "/plans"; break;
+    case "list_addons": path = "/addons"; break;
+    case "list_coupons": path = "/coupons"; break;
+    case "get_plan": path = "/plans/" + pv.plan_code; break;
+    default: throw new Error("Unsupported Billing op: " + op);
+  }
+  const q = new URLSearchParams();
+  Object.keys(qp).forEach((k) => { if (qp[k] != null) q.set(k, typeof qp[k] === "object" ? JSON.stringify(qp[k]) : String(qp[k])); });
+  const url = ZOHO_BILLING + path + (q.toString() ? "?" + q.toString() : "");
+  const headers = {
+    Authorization: "Zoho-oauthtoken " + (await zohoToken()),
+    "X-com-zoho-subscriptions-organizationid": ZOHO_ORG_ID || "",
+  };
+  const r = await fetch(url, { method, headers });
+  return await r.json();
+}
+
 async function zoho(op, args) {
+  if (op.startsWith("billing_")) return billing(op.slice("billing_".length), args);
   const qp = args.query_params || {}, body = args.body || {}, pv = args.path_variables || {};
   let path = "", method = "GET";
   switch (op) {

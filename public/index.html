@@ -396,7 +396,7 @@ const GMAIL='mcp__58de8fc0-38b2-41af-9a9e-e79d80500208';
 const ORG='60062278723';
 const DB_KEY='digistay_quotes_v1';
 const SELLER_KEY='digistay_seller_v2';
-const CAT_KEY='digistay_catalog_v9';
+const CAT_KEY='digistay_catalog_v10_billing';
 const POC_KEY='digistay_lastpoc';
 const USER_KEY='digistay_user_v1';
 const SCAN_CAP=500;
@@ -523,91 +523,54 @@ function bookGst(it){const prefs=(it&&it.item_tax_preferences)||[];const intra=p
 
 /* ---------- AI Hotel Manager catalog (harvested from estimates) ---------- */
 function catStatus(msg,busy){const el=$('catalogStatus');el.textContent=msg||'';el.style.color=busy?'var(--brand)':'var(--muted)';}
+// ---- Catalog sourced from Zoho Billing (Product Catalog: plans / add-ons / coupons) ----
+function _taxPct(o){const prefs=(o&&o.item_tax_preferences)||[];const intra=prefs.find(p=>p.tax_specification==='intra')||prefs[0];const v=intra?Number(intra.tax_percentage):NaN;return isFinite(v)?v:18;}
+async function fetchBillingList(op,key){
+  let out=[],page=1;
+  for(;;){
+    const r=await call(ZOHO+'__billing_'+op,{query_params:{per_page:200,page:page}});
+    const arr=(r&&r[key])||[];out=out.concat(arr);
+    const pc=(r&&r.page_context)||{};
+    if(!arr.length||pc.has_more_page===false||arr.length<200||page>=10)break;
+    page++;
+  }
+  return out;
+}
+async function fetchBillingCatalog(){
+  const rawPlans=await fetchBillingList('list_plans','plans');
+  const rawAddons=await fetchBillingList('list_addons','addons');
+  const rawCoupons=await fetchBillingList('list_coupons','coupons');
+  const dedup=arr=>{const seen={},out=[];arr.forEach(x=>{const k=normName(x.name);if(!k||seen[k])return;seen[k]=1;out.push(x);});return out;};
+  const plans=rawPlans.filter(p=>p.status==='active').map(p=>({item_id:String(p.plan_id||''),code:p.plan_code||'',name:String(p.name||'').trim(),rate:Number(p.recurring_price)||0,desc:p.description||'',gst:_taxPct(p),unit:p.interval_unit||'',type:1}));
+  const addons=rawAddons.filter(a=>a.status==='active').map(a=>({item_id:String(a.addon_id||''),code:a.addon_code||'',name:String(a.name||'').trim(),rate:Number(a.price_brackets&&a.price_brackets[0]&&a.price_brackets[0].price)||0,desc:a.description||'',gst:_taxPct(a),unit:a.interval_unit||'',type:2}));
+  const coupons=rawCoupons.filter(c=>c.status==='active').map(c=>({code:c.coupon_code,name:c.name||c.coupon_code,percent:(c.discount_by==='percentage')?(Number(c.discount_value)||0):0,amount:(c.discount_by!=='percentage')?(Number(c.discount_value)||0):0}));
+  return {plans:dedup(plans),addons:dedup(addons),coupons:coupons};
+}
 async function buildCatalog(force){
   if(!force){const c=loadCat();if(c&&c.builtAt&&(Date.now()-c.builtAt<7*864e5)){STATE.catalog=c;sortCatalogPlans(STATE.catalog);renderWizard();renderPocList();renderCoupons();catStatus('Catalog: '+c.plans.length+' plans · '+c.addons.length+' add-ons · '+c.coupons.length+' coupons (cached '+new Date(c.builtAt).toLocaleDateString()+')',false);return c;}}
-  STATE._catBusy=true;$('rebuildBtn').disabled=true;catStatus('Loading estimates…',true);
-  let ests=[];
-  try{let page=1;while(ests.length<SCAN_CAP){
-      const le=await call(ZOHO+'__list_estimates',{query_params:{organization_id:ORG,per_page:100,page:page,sort_column:'created_time'}});
-      const arr=(le&&le.data&&le.data.estimates)||(le&&le.estimates)||[];
-      ests=ests.concat(arr);
-      const pc=(le&&le.data&&le.data.page_context)||(le&&le.page_context)||{};
-      catStatus('Loading estimates… '+ests.length,true);
-      if(!arr.length||pc.has_more_page===false||arr.length<100||page>=8)break;
-      page++;
-    }}
-  catch(e){catStatus('⚠ Could not load estimates: '+e.message,false);$('rebuildBtn').disabled=false;STATE._catBusy=false;return STATE.catalog;}
-  const pocs={};ests.forEach(e=>{if(e.salesperson_name)pocs[e.salesperson_name]=1;});
-  const plans={},addons={},coupons={};
-  const ids=ests.slice(0,SCAN_CAP).map(e=>e.estimate_id);
-  let done=0;const total=ids.length,B=10;
-  for(let i=0;i<ids.length;i+=B){
-    await Promise.all(ids.slice(i,i+B).map(async id=>{
-      try{
-        const ge=await call(ZOHO+'__get_estimate',{path_variables:{estimate_id:id},query_params:{organization_id:ORG}});
-        const est=(ge&&ge.data&&ge.data.estimate)||(ge&&ge.estimate);if(!est)return;
-        const ct=est.created_time||'';
-        (est.line_items||[]).forEach(li=>{
-          const tnum=Number(li.type);if(tnum!==1&&tnum!==2)return; // only true plans(1)/add-ons(2); skip custom/untyped lines
-          const isAdd=tnum===2;const b=isAdd?addons:plans;
-          const key=li.item_id||('n:'+(li.name||''));
-          const rate=Number(li.rate)||0,gst=Number(li.tax_percentage)||18;
-          if(!b[key])b[key]={item_id:li.item_id||'',name:li.name||'Item',rate:rate,desc:li.description||'',gst:gst,unit:li.interval_unit||li.unit||'',type:isAdd?2:1,_t:ct};
-          else if(ct>(b[key]._t||'')){b[key].rate=rate;b[key]._t=ct;if((li.description||'').length>(b[key].desc||'').length)b[key].desc=li.description;}
-        });
-        if(est.coupon&&est.coupon.coupon_code){const cc=est.coupon.coupon_code;
-          if(!coupons[cc])coupons[cc]={code:cc,name:est.coupon.coupon_name||cc,percent:Number(est.discount_percent)||0,amount:Number(est.coupon.discount_amount)||0};}
-      }catch(e){}
-      done++;catStatus('Building AI Hotel Manager catalog… '+done+'/'+total,true);
-    }));
-  }
-  CURATED_CATALOG.forEach(it=>{const rec={item_id:it.id,name:it.name,rate:Number(it.rate)||0,desc:it.desc||'',gst:18,unit:it.unit||''};if(it.type===1)plans[it.id]=rec;else addons[it.id]=rec;});
-  await discoverExtras(plans,addons);
-  const clean=o=>{const v=Object.values(o);v.forEach(x=>delete x._t);return v;};
-  const dedup=arr=>{const seen={},out=[];arr.forEach(x=>{const k=normName(x.name);if(!k||seen[k])return;seen[k]=1;out.push(x);});return out;};
-  const cat={plans:dedup(clean(plans)),addons:dedup(clean(addons)),
-    coupons:Object.values(coupons),pocs:Object.keys(pocs),builtAt:Date.now()};
-  STATE.catalog=cat;sortCatalogPlans(STATE.catalog);saveCat(cat);
-  renderWizard();renderPocList();renderCoupons();
-  catStatus('Catalog ready · '+cat.plans.length+' plans · '+cat.addons.length+' add-ons · '+cat.coupons.length+' coupons (scanned '+total+' estimates)',false);
-  $('rebuildBtn').disabled=false;STATE._catBusy=false;
-  return cat;
+  STATE._catBusy=true;$('rebuildBtn').disabled=true;catStatus('Loading plans from Zoho Billing…',true);
+  try{
+    const r=await fetchBillingCatalog();
+    const cat={plans:r.plans,addons:r.addons,coupons:r.coupons,pocs:(STATE.catalog&&STATE.catalog.pocs)||[],builtAt:Date.now()};
+    STATE.catalog=cat;sortCatalogPlans(cat);saveCat(cat);
+    renderWizard();renderPocList();renderCoupons();
+    catStatus('Catalog ready · '+cat.plans.length+' plans · '+cat.addons.length+' add-ons · '+cat.coupons.length+' coupons (from Zoho Billing)',false);
+    return cat;
+  }catch(e){catStatus('⚠ Could not load Billing catalog: '+e.message,false);return STATE.catalog;}
+  finally{$('rebuildBtn').disabled=false;STATE._catBusy=false;}
 }
-// Lightweight always-on sync: refresh live items + merge the most recent estimates into the cached catalog
-// so new plans / add-ons / invoiced items created in Zoho show up automatically (without a full rescan).
+// Lightweight always-on sync: re-pull the live Billing catalog so new/edited plans,
+// add-ons and coupons created in Zoho Billing show up automatically.
 async function refreshCatalogLive(){
   if(STATE._catBusy||STATE.syncing)return;
   STATE._catBusy=true;
   try{
     await fetchItems();
-    const base=STATE.catalog||{plans:[],addons:[],coupons:[],pocs:[]};
-    const keyOf=x=>x.item_id||('n:'+(x.name||''));
-    const plans={},addons={},coupons={},pocset={};
-    (base.plans||[]).forEach(p=>{plans[keyOf(p)]=Object.assign({},p);});
-    (base.addons||[]).forEach(a=>{addons[keyOf(a)]=Object.assign({},a);});
-    (base.coupons||[]).forEach(c=>{if(c&&c.code)coupons[c.code]=c;});
-    (base.pocs||[]).forEach(n=>{if(n)pocset[n]=1;});
-    const le=await call(ZOHO+'__list_estimates',{query_params:{organization_id:ORG,per_page:25,page:1,sort_column:'created_time'}});
-    const arr=(le&&le.data&&le.data.estimates)||(le&&le.estimates)||[];
-    arr.forEach(e=>{if(e.salesperson_name)pocset[e.salesperson_name]=1;});
-    const ids=arr.map(e=>e.estimate_id);
-    for(let i=0;i<ids.length;i+=10){
-      await Promise.all(ids.slice(i,i+10).map(async id=>{
-        try{const ge=await call(ZOHO+'__get_estimate',{path_variables:{estimate_id:id},query_params:{organization_id:ORG}});
-          const est=(ge&&ge.data&&ge.data.estimate)||(ge&&ge.estimate);if(!est)return;
-          (est.line_items||[]).forEach(li=>{const tnum=Number(li.type);if(tnum!==1&&tnum!==2)return;const isAdd=tnum===2;const b=isAdd?addons:plans;
-            const key=li.item_id||('n:'+(li.name||''));
-            if(!b[key])b[key]={item_id:li.item_id||'',name:li.name||'Item',rate:Number(li.rate)||0,desc:li.description||'',gst:Number(li.tax_percentage)||18,unit:li.interval_unit||li.unit||'',type:isAdd?2:1};});
-          if(est.coupon&&est.coupon.coupon_code){const cc=est.coupon.coupon_code;if(!coupons[cc])coupons[cc]={code:cc,name:est.coupon.coupon_name||cc,percent:Number(est.discount_percent)||0,amount:Number(est.coupon.discount_amount)||0};}
-        }catch(e){}
-      }));
-    }
-    CURATED_CATALOG.forEach(it=>{const rec={item_id:it.id,name:it.name,rate:Number(it.rate)||0,desc:it.desc||'',gst:18,unit:it.unit||''};if(it.type===1)plans[it.id]=rec;else addons[it.id]=rec;});
-    const dedup=a=>{const seen={},out=[];a.forEach(x=>{const k=normName(x.name);if(!k||seen[k])return;seen[k]=1;out.push(x);});return out;};
-    const cat={plans:dedup(Object.values(plans)),addons:dedup(Object.values(addons)),coupons:Object.values(coupons),pocs:Object.keys(pocset),builtAt:Date.now()};
+    const r=await fetchBillingCatalog();
+    const cat={plans:r.plans,addons:r.addons,coupons:r.coupons,pocs:(STATE.catalog&&STATE.catalog.pocs)||[],builtAt:Date.now()};
     STATE.catalog=cat;sortCatalogPlans(cat);saveCat(cat);
     renderWizard();renderPocList();renderCoupons();
-    catStatus('Auto-synced with Zoho · '+cat.plans.length+' plans · '+cat.addons.length+' add-ons · '+cat.coupons.length+' coupons · '+new Date().toLocaleTimeString(),false);
+    catStatus('Auto-synced with Zoho Billing · '+cat.plans.length+' plans · '+cat.addons.length+' add-ons · '+cat.coupons.length+' coupons · '+new Date().toLocaleTimeString(),false);
   }catch(e){}
   STATE._catBusy=false;
 }
