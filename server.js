@@ -129,37 +129,60 @@ async function billing(op, args) {
   return await r.json();
 }
 
+// The frontend speaks the Books "contact" vocabulary; Zoho Billing speaks "customer".
+// Translate the request body and the response so the frontend keeps working unchanged.
+function remapCustomerToContact(d) {
+  if (!d || typeof d !== "object") return d;
+  const fix = (c) => { if (c && !c.contact_name) c.contact_name = c.customer_name || c.display_name || ""; return c; };
+  if (Array.isArray(d.customers)) d.contacts = d.customers.map(fix);
+  if (d.customer) d.contact = fix(d.customer);
+  return d;
+}
+
+// Zoho ops now run against Zoho Billing (Books is disabled for this org). Billing serves the
+// same estimate/customer model at /billing/v1 with a JSON body and the org header.
 async function zoho(op, args) {
   if (op.startsWith("billing_")) return billing(op.slice("billing_".length), args);
   const qp = args.query_params || {}, body = args.body || {}, pv = args.path_variables || {};
-  let path = "", method = "GET";
+  let path = "", method = "GET", contactShape = false, sendEstimate = false;
   switch (op) {
     case "list_items": path = "/items"; break;
     case "list_estimates": path = "/estimates"; break;
     case "get_estimate": path = "/estimates/" + pv.estimate_id; break;
-    case "create_estimate": path = "/estimates"; method = "POST"; break;
+    case "create_estimate": path = "/estimates"; method = "POST"; sendEstimate = String(qp.send) === "true"; break;
     case "update_estimate": path = "/estimates/" + pv.estimate_id; method = "PUT"; break;
     case "delete_estimate": path = "/estimates/" + pv.estimate_id; method = "DELETE"; break;
     case "list_invoices": path = "/invoices"; break;
-    case "list_contacts": path = "/contacts"; break;
-    case "get_contact": path = "/contacts/" + pv.contact_id; break;
-    case "create_contact": path = "/contacts"; method = "POST"; break;
+    case "list_contacts": path = "/customers"; contactShape = true; break;
+    case "get_contact": path = "/customers/" + pv.contact_id; contactShape = true; break;
+    case "create_contact": path = "/customers"; method = "POST"; contactShape = true; break;
     case "get_organization": path = "/organizations/" + (pv.organization_id || qp.organization_id || ZOHO_ORG_ID); break;
     case "list_users": path = "/users"; break;
     default: throw new Error("Unsupported Zoho op: " + op);
   }
   const q = new URLSearchParams();
-  Object.keys(qp).forEach((k) => { if (qp[k] != null) q.set(k, typeof qp[k] === "object" ? JSON.stringify(qp[k]) : String(qp[k])); });
-  if (!q.get("organization_id") && ZOHO_ORG_ID) q.set("organization_id", ZOHO_ORG_ID);
-  const url = ZOHO_API + path + "?" + q.toString();
-  const headers = { Authorization: "Zoho-oauthtoken " + (await zohoToken()) };
+  Object.keys(qp).forEach((k) => { if (k !== "send" && k !== "organization_id" && qp[k] != null) q.set(k, typeof qp[k] === "object" ? JSON.stringify(qp[k]) : String(qp[k])); });
+  const headers = {
+    Authorization: "Zoho-oauthtoken " + (await zohoToken()),
+    "X-com-zoho-subscriptions-organizationid": ZOHO_ORG_ID || "",
+  };
   let fetchBody;
   if (method === "POST" || method === "PUT") {
-    const fd = new URLSearchParams(); fd.set("JSONString", JSON.stringify(body)); fetchBody = fd;
-    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    const outBody = contactShape ? Object.assign({}, body, body.contact_name && !body.display_name ? { display_name: body.contact_name } : {}) : body;
+    fetchBody = JSON.stringify(outBody);
+    headers["Content-Type"] = "application/json";
   }
+  const url = ZOHO_BILLING + path + (q.toString() ? "?" + q.toString() : "");
   const r = await fetch(url, { method, headers, body: fetchBody });
-  return await r.json();
+  let data = await r.json();
+  if (data && typeof data.code === "number" && data.code !== 0) throw new Error(data.message || ("Zoho Billing error " + data.code));
+  // Best-effort: when the app asked to "send" a freshly created estimate, mark it sent + email it.
+  if (sendEstimate && data && data.estimate && data.estimate.estimate_id) {
+    const eid = data.estimate.estimate_id;
+    try { await fetch(`${ZOHO_BILLING}/estimates/${eid}/status/sent`, { method: "POST", headers }); } catch (e) {}
+    try { await fetch(`${ZOHO_BILLING}/estimates/${eid}/email`, { method: "POST", headers: Object.assign({}, headers, { "Content-Type": "application/json" }), body: "{}" }); } catch (e) {}
+  }
+  return contactShape ? remapCustomerToContact(data) : data;
 }
 
 /* ------------------------------ HubSpot ------------------------------- */
