@@ -163,6 +163,7 @@ async function zoho(op, args) {
     case "list_contacts": path = "/customers"; contactShape = true; break;
     case "get_contact": path = "/customers/" + pv.contact_id; contactShape = true; break;
     case "create_contact": path = "/customers"; method = "POST"; contactShape = true; break;
+    case "update_contact": path = "/customers/" + pv.contact_id; method = "PUT"; contactShape = true; break;
     case "get_organization": path = "/organizations/" + (pv.organization_id || qp.organization_id || ZOHO_ORG_ID); break;
     case "list_users": path = "/users"; break;
     default: throw new Error("Unsupported Zoho op: " + op);

@@ -538,7 +538,7 @@ function blankQuote(){
     zohoEstimateId:'',zohoEstimateNumber:'',zohoEstimateUrl:'',zohoPayLinkUrl:'',zohoPayLinkId:'',zohoPayLinkAmount:0,zohoPayLinkCustomerId:'',zohoCustomerId:'',hubspotNoteId:'',zohoStatus:'',zohoEmailed:false,zohoSendError:'',paid:false,paymentId:'',paidAt:'',paidAmount:0,
     customer:{name:'',email:'',phone:'',address:'',city:'',state:'',pincode:'',gstin:'',roomCount:'',propertyName:'',hubspotId:'',zohoId:'',zohoContactPersonId:'',ownerId:''},
     taxMode:'intra',lines:[],coupon:null,overallDiscType:'pct',overallDiscValue:0,
-    notes:'Looking forward to your business.',terms:'50% advance to confirm onboarding. Prices valid for 15 days. GST as applicable.'};
+    notes:'We look forward to contributing to your success.',terms:'50% advance to confirm onboarding. Prices valid for 15 days. GST as applicable.'};
 }
 function nextNumber(){STATE.db.seq=(STATE.db.seq||0)+1;return 'DGSTAY-QT-'+String(STATE.db.seq).padStart(4,'0');}
 
@@ -1126,6 +1126,9 @@ async function pushToZoho(q,markSent){
   const subscription=!!planLine && billable.length>0 && billable.every(l=>!!lineItemId(q,l));
   const lines=buildZohoLines(q,subscription);if(!lines.length)throw new Error('no items');
   const cid=await ensureZohoCustomer(q);
+  // Keep the Zoho customer's Place of Supply in sync with the quote's state (best-effort, on save/send).
+  const pcCode=stateCode(q.customer.state);
+  if(cid&&pcCode){try{const upd={place_of_contact:pcCode};if(q.customer.gstin){upd.gst_treatment='business_gst';upd.gst_no=q.customer.gstin;}await call(ZOHO+'__update_contact',{path_variables:{contact_id:cid},body:upd});}catch(e){}}
   const cpid=await getZohoContactPersonId(q);
   const body={customer_id:cid,date:q.date,reference_number:String(q.number||''),notes:q.notes||'',terms:q.terms||'',line_items:lines,is_discount_before_tax:true};
   if(subscription){const term=periodOf(planLine.name,planLine.unit);body.estimate_type='new_subscription';body.interval_unit=(term==='year')?'years':'months';}
