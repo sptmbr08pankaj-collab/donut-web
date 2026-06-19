@@ -118,6 +118,7 @@ async function billing(op, args) {
     case "get_plan": path = "/plans/" + pv.plan_code; break;
     case "list_payment_links": path = "/paymentlinks"; break;
     case "create_payment_link": path = "/paymentlinks"; method = "POST"; break;
+    case "cancel_payment_link": path = "/paymentlinks/" + pv.payment_link_id + "/cancel"; method = "POST"; break;
     default: throw new Error("Unsupported Billing op: " + op);
   }
   const q = new URLSearchParams();

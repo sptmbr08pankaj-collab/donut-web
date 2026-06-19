@@ -535,7 +535,7 @@ function parseRooms(p){
 function blankQuote(){
   return {id:uid(),number:'',saved:false,date:todayISO(),validUntil:addDays(todayISO(),15),
     poc:(localStorage.getItem(POC_KEY)||'abhinav'),subject:'',
-    zohoEstimateId:'',zohoEstimateNumber:'',zohoEstimateUrl:'',zohoPayLinkUrl:'',zohoPayLinkId:'',zohoCustomerId:'',hubspotNoteId:'',zohoStatus:'',zohoEmailed:false,zohoSendError:'',paid:false,paymentId:'',paidAt:'',paidAmount:0,
+    zohoEstimateId:'',zohoEstimateNumber:'',zohoEstimateUrl:'',zohoPayLinkUrl:'',zohoPayLinkId:'',zohoPayLinkAmount:0,zohoPayLinkCustomerId:'',zohoCustomerId:'',hubspotNoteId:'',zohoStatus:'',zohoEmailed:false,zohoSendError:'',paid:false,paymentId:'',paidAt:'',paidAmount:0,
     customer:{name:'',email:'',phone:'',address:'',city:'',state:'',pincode:'',gstin:'',roomCount:'',propertyName:'',hubspotId:'',zohoId:'',zohoContactPersonId:'',ownerId:''},
     taxMode:'intra',lines:[],coupon:null,overallDiscType:'pct',overallDiscValue:0,
     notes:'Looking forward to your business.',terms:'50% advance to confirm onboarding. Prices valid for 15 days. GST as applicable.'};
@@ -1221,14 +1221,16 @@ async function syncExternal(opts){
 /* ---------- Razorpay payment link + reconciliation ---------- */
 async function copyPayLink(){
   const q=STATE.cur;
-  // Reuse an already-generated link for this quote if present.
-  if(q.zohoPayLinkUrl){
-    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(q.zohoPayLinkUrl).then(function(){flash('💳 Payment link copied — send it to the customer to Pay Now.');},function(){window.open(q.zohoPayLinkUrl,'_blank');});}
+  const t=compute(q);const amt=Number(t.grand)||0;
+  if(amt<=0){flash('Add items to the quote first — there is nothing to charge.',true);return;}
+  const curCust=q.zohoCustomerId||q.customer.zohoId||'';
+  // Reuse the cached link ONLY if it was generated for the same amount AND customer; otherwise regenerate
+  // so an edited quote (changed add-ons / total) gets a fresh link with the correct amount.
+  if(q.zohoPayLinkUrl && Math.abs(Number(q.zohoPayLinkAmount||0)-amt)<0.01 && (q.zohoPayLinkCustomerId||'')===curCust){
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(q.zohoPayLinkUrl).then(function(){flash('💳 Payment link for '+fmtINR(amt)+' copied — send it to the customer to Pay Now.');},function(){window.open(q.zohoPayLinkUrl,'_blank');});}
     else window.open(q.zohoPayLinkUrl,'_blank');
     return;
   }
-  const t=compute(q);const amt=Number(t.grand)||0;
-  if(amt<=0){flash('Add items to the quote first — there is nothing to charge.',true);return;}
   try{
     setSync('Generating Zoho payment link…',true);
     const cid=await ensureZohoCustomer(q);
@@ -1237,7 +1239,9 @@ async function copyPayLink(){
     const pl=(r&&r.payment_link)||(r&&r.data&&r.data.payment_link)||{};
     const u=pl.url||'';
     if(!u)throw new Error((r&&(r.message||r.error))||'Zoho did not return a link');
-    q.zohoPayLinkUrl=u;q.zohoPayLinkId=pl.payment_link_id||'';persistCur();refreshQuoteSelect();
+    // Best-effort: cancel the previous (stale) link so the customer can't pay the old amount.
+    if(q.zohoPayLinkId&&q.zohoPayLinkId!==(pl.payment_link_id||'')){try{await call(ZOHO+'__billing_cancel_payment_link',{path_variables:{payment_link_id:q.zohoPayLinkId}});}catch(e){}}
+    q.zohoPayLinkUrl=u;q.zohoPayLinkId=pl.payment_link_id||'';q.zohoPayLinkAmount=amt;q.zohoPayLinkCustomerId=cid;persistCur();refreshQuoteSelect();
     // Log/refresh the payment link on the customer's HubSpot note.
     let hsNote='';try{const hid=await ensureHubspotContact(q);if(hid){await pushToHubspotNote(q);persistCur();hsNote=' · logged to HubSpot';}}catch(e){hsNote=' · HubSpot note failed: '+e.message;}
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(u).then(function(){flash('💳 Payment link for '+fmtINR(amt)+' copied — send it to the customer to Pay Now.'+hsNote);},function(){window.open(u,'_blank');});}
