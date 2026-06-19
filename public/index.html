@@ -444,19 +444,50 @@ function inferStateFromPin(pin){
   const st=m[p2]||'';
   return {state:st,confident:!!st};
 }
+// City -> state for major Indian cities (fallback when PIN is missing/invalid).
+const CITY_STATE={'mumbai':'Maharashtra','pune':'Maharashtra','nagpur':'Maharashtra','nashik':'Maharashtra','thane':'Maharashtra','navi mumbai':'Maharashtra','aurangabad':'Maharashtra','solapur':'Maharashtra',
+ 'delhi':'Delhi','new delhi':'Delhi','noida':'Uttar Pradesh','greater noida':'Uttar Pradesh','ghaziabad':'Uttar Pradesh','lucknow':'Uttar Pradesh','kanpur':'Uttar Pradesh','agra':'Uttar Pradesh','varanasi':'Uttar Pradesh','prayagraj':'Uttar Pradesh','allahabad':'Uttar Pradesh','meerut':'Uttar Pradesh','ayodhya':'Uttar Pradesh','mathura':'Uttar Pradesh',
+ 'gurgaon':'Haryana','gurugram':'Haryana','faridabad':'Haryana','panipat':'Haryana','karnal':'Haryana',
+ 'bengaluru':'Karnataka','bangalore':'Karnataka','mysuru':'Karnataka','mysore':'Karnataka','mangaluru':'Karnataka','mangalore':'Karnataka','hubli':'Karnataka',
+ 'chennai':'Tamil Nadu','coimbatore':'Tamil Nadu','madurai':'Tamil Nadu','tiruchirappalli':'Tamil Nadu','salem':'Tamil Nadu',
+ 'hyderabad':'Telangana','warangal':'Telangana','secunderabad':'Telangana',
+ 'kolkata':'West Bengal','howrah':'West Bengal','siliguri':'West Bengal','durgapur':'West Bengal',
+ 'ahmedabad':'Gujarat','surat':'Gujarat','vadodara':'Gujarat','rajkot':'Gujarat','gandhinagar':'Gujarat',
+ 'jaipur':'Rajasthan','udaipur':'Rajasthan','jodhpur':'Rajasthan','kota':'Rajasthan','ajmer':'Rajasthan','bikaner':'Rajasthan','mount abu':'Rajasthan',
+ 'kochi':'Kerala','cochin':'Kerala','thiruvananthapuram':'Kerala','trivandrum':'Kerala','kozhikode':'Kerala','calicut':'Kerala','munnar':'Kerala','alappuzha':'Kerala','alleppey':'Kerala','wayanad':'Kerala','thrissur':'Kerala',
+ 'bhopal':'Madhya Pradesh','indore':'Madhya Pradesh','gwalior':'Madhya Pradesh','jabalpur':'Madhya Pradesh','ujjain':'Madhya Pradesh',
+ 'patna':'Bihar','gaya':'Bihar','ranchi':'Jharkhand','jamshedpur':'Jharkhand','dhanbad':'Jharkhand',
+ 'chandigarh':'Chandigarh','ludhiana':'Punjab','amritsar':'Punjab','jalandhar':'Punjab','mohali':'Punjab','patiala':'Punjab',
+ 'dehradun':'Uttarakhand','haridwar':'Uttarakhand','rishikesh':'Uttarakhand','nainital':'Uttarakhand','mussoorie':'Uttarakhand','haldwani':'Uttarakhand','roorkee':'Uttarakhand',
+ 'shimla':'Himachal Pradesh','manali':'Himachal Pradesh','dharamshala':'Himachal Pradesh','dharamsala':'Himachal Pradesh','kasauli':'Himachal Pradesh','dalhousie':'Himachal Pradesh','mcleodganj':'Himachal Pradesh',
+ 'srinagar':'Jammu and Kashmir','jammu':'Jammu and Kashmir','gulmarg':'Jammu and Kashmir','leh':'Ladakh',
+ 'goa':'Goa','panaji':'Goa','panjim':'Goa','margao':'Goa','vasco':'Goa','calangute':'Goa','candolim':'Goa','mapusa':'Goa',
+ 'bhubaneswar':'Odisha','cuttack':'Odisha','puri':'Odisha','guwahati':'Assam','dibrugarh':'Assam','shillong':'Meghalaya','imphal':'Manipur','agartala':'Tripura','aizawl':'Mizoram','kohima':'Nagaland','itanagar':'Arunachal Pradesh','gangtok':'Sikkim','dispur':'Assam',
+ 'visakhapatnam':'Andhra Pradesh','vijayawada':'Andhra Pradesh','guntur':'Andhra Pradesh','tirupati':'Andhra Pradesh','vizag':'Andhra Pradesh','raipur':'Chhattisgarh','bhilai':'Chhattisgarh','bilaspur':'Chhattisgarh','puducherry':'Puducherry','pondicherry':'Puducherry','port blair':'Andaman and Nicobar Islands','daman':'Dadra and Nagar Haveli and Daman and Diu'};
+function inferStateFromCity(city){const k=String(city||'').trim().toLowerCase();return CITY_STATE[k]||'';}
+// GST state codes (first 2 digits of a GSTIN).
+const GST_STATE_BY_CODE={'01':'Jammu and Kashmir','02':'Himachal Pradesh','03':'Punjab','04':'Chandigarh','05':'Uttarakhand','06':'Haryana','07':'Delhi','08':'Rajasthan','09':'Uttar Pradesh','10':'Bihar','11':'Sikkim','12':'Arunachal Pradesh','13':'Nagaland','14':'Manipur','15':'Mizoram','16':'Tripura','17':'Meghalaya','18':'Assam','19':'West Bengal','20':'Jharkhand','21':'Odisha','22':'Chhattisgarh','23':'Madhya Pradesh','24':'Gujarat','25':'Dadra and Nagar Haveli and Daman and Diu','26':'Dadra and Nagar Haveli and Daman and Diu','27':'Maharashtra','28':'Andhra Pradesh','29':'Karnataka','30':'Goa','31':'Lakshadweep','32':'Kerala','33':'Tamil Nadu','34':'Puducherry','35':'Andaman and Nicobar Islands','36':'Telangana','37':'Andhra Pradesh','38':'Ladakh'};
+function isValidGstin(g){return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(String(g||'').trim());}
+function stateFromGstin(g){const s=String(g||'').trim();if(s.length<2)return '';return GST_STATE_BY_CODE[s.slice(0,2)]||'';}
+// Derive the state automatically: PIN first, then city. Returns '' when neither resolves.
+function deriveStateAuto(c){const p=inferStateFromPin(c.pincode);if(p.state)return p.state;return inferStateFromCity(c.city)||'';}
 function resolveTax(){
   const q=STATE.cur,c=q.customer,seller=normState(STATE.seller.state);
+  // Auto-derive state from PIN -> City unless the user (or a GSTIN) set it explicitly.
+  if(!q._stateManual){
+    const st=deriveStateAuto(c);
+    c.state=st||'';
+    if($('custState'))$('custState').value=c.state;
+    q._pinState=!!st;
+  }
   if(c.state){q.taxMode=(normState(c.state)===seller)?'intra':'inter';}
-  else if(c.pincode){const inf=inferStateFromPin(c.pincode);
-    if(inf.state){c.state=inf.state;if($('custState'))$('custState').value=inf.state;q._pinState=true;q.taxMode=(normState(inf.state)===seller)?'intra':'inter';}}
   if($('taxMode'))$('taxMode').value=q.taxMode;
   render();
 }
 function updateTaxBasis(){
   const el=$('taxBasis');if(!el)return;const q=STATE.cur,c=q.customer,intra=q.taxMode==='intra';let t,amber=false;
-  if(c.state){t=(q._pinState?('From PIN '+(c.pincode||'')+' → '+c.state+' — confirm'):('Auto from state: '+c.state))+' → '+(intra?'CGST + SGST':'IGST');amber=!!q._pinState;}
-  else if(c.pincode){t='PIN '+c.pincode+' — state not confirmed; pick tax type';amber=true;}
-  else{t='No state/PIN from HubSpot — pick tax type manually';amber=true;}
+  if(c.state){const src=q._stateManual?'Set':(inferStateFromPin(c.pincode).state?('From PIN '+(c.pincode||'')):(inferStateFromCity(c.city)?('From city '+c.city):'Auto'));t=src+' → '+c.state+' → '+(intra?'CGST + SGST':'IGST');amber=!!q._pinState&&!q._stateManual;}
+  else{t='No state from PIN/City — enter state manually';amber=true;}
   el.textContent=t;el.style.color=amber?'var(--warn)':'var(--muted)';
 }
 
@@ -815,8 +846,10 @@ async function doCustSearch(q){
 function selectCustomer(r){
   const p=r.properties||{},c=STATE.cur.customer;
   c.name=((p.firstname||'')+' '+(p.lastname||'')).trim()||c.name;c.email=p.email||'';c.phone=p.phone||'';c.city=p.city||'';
-  c.state=p.property_state||p.state||'';c.pincode=p.pincode||p.zip||'';
-  c.propertyName=firstVal(p.hotel_name,p.property_name,p.hotel_name_enriched,p.enrichment_hotel_name,p.referred_hotel_name);c.roomCount=parseRooms(p);c.hubspotId=r.id;c.zohoId='';c.ownerId=p.hubspot_owner_id||'';STATE.cur._pinState=false;
+  c.pincode=p.pincode||p.zip||'';
+  // State is derived from PIN -> City (HubSpot's own state field is unreliable). Leave blank if neither resolves.
+  STATE.cur._stateManual=false;c.state=deriveStateAuto(c);
+  c.propertyName=firstVal(p.hotel_name,p.property_name,p.hotel_name_enriched,p.enrichment_hotel_name,p.referred_hotel_name);c.roomCount=parseRooms(p);c.hubspotId=r.id;c.zohoId='';c.ownerId=p.hubspot_owner_id||'';STATE.cur._pinState=!!c.state;
   $('custResults').className='dropdown';$('custSearch').value='';
   $('zohoMatchInfo').textContent='';syncFormFromState();resolveTax();resolveOwnerPOC(c.ownerId);syncRoomLicense();renderWizard();renderLines();markDirty();render();
 }
@@ -1037,7 +1070,7 @@ async function ensureZohoCustomer(q){
     throw e;
   }
 }
-function buildZohoLines(q){const t=compute(q);const tax=(q.taxMode==='inter')?ZOHO_IGST18:ZOHO_GST18;return t.lines.filter(l=>(l.qtyEff||0)>0).map(l=>({name:String(l.name||'Item').slice(0,200),rate:Number(l.rate)||0,quantity:l.qtyEff,tax_id:tax,description:String(l.desc||'').slice(0,1800)}));}
+function buildZohoLines(q){const t=compute(q);const tax=(q.taxMode==='inter')?ZOHO_IGST18:ZOHO_GST18;return t.lines.filter(l=>(l.qtyEff||0)>0).map(l=>{const li={name:String(l.name||'Item').slice(0,200),rate:Number(l.rate)||0,quantity:l.qtyEff,tax_id:tax,description:String(l.desc||'').slice(0,1800)};if(l.itemId)li.item_id=String(l.itemId);return li;});}
 // Find the customer's primary contact-person id so the estimate can actually be emailed to them.
 async function getZohoContactPersonId(q){
   if(q.customer.zohoContactPersonId)return q.customer.zohoContactPersonId;
@@ -1061,6 +1094,9 @@ async function pushToZoho(q,markSent){
   const cid=await ensureZohoCustomer(q);const t=compute(q);
   const cpid=await getZohoContactPersonId(q);
   const body={customer_id:cid,date:q.date,reference_number:String(q.number||''),notes:q.notes||'',terms:q.terms||'',line_items:lines,is_discount_before_tax:true};
+  // A quote with a plan -> Subscription Quote (estimate_type=new_subscription + interval); add-ons/services only -> regular Quote (omit estimate_type).
+  const planLine=q.lines.find(l=>l.kind==='plan');
+  if(planLine){const term=periodOf(planLine.name,planLine.unit);body.estimate_type='new_subscription';body.interval_unit=(term==='year')?'years':'months';}
   const pc=stateCode(q.customer.state);if(pc)body.place_of_supply=pc;
   if(q.poc)body.salesperson_name=q.poc;
   if(q.validUntil)body.expiry_date=q.validUntil;
@@ -1262,8 +1298,11 @@ function bindForm(){
   applyDiscVisibility();
   ['custName','propertyName','custEmail','custPhone','roomCount','custCity','custGstin','taxMode','quoteNumber','quoteDate','validUntil','pocName','subject','notes','terms']
    .forEach(id=>{const el=$(id);const ev=(el.tagName==='SELECT')?'change':'input';el.addEventListener(ev,()=>{syncStateFromForm();markDirty();render();});});
-  $('custState').addEventListener('input',()=>{STATE.cur.customer.state=$('custState').value;STATE.cur._pinState=false;markDirty();resolveTax();});
-  $('pincode').addEventListener('input',()=>{STATE.cur.customer.pincode=$('pincode').value;markDirty();resolveTax();});
+  $('custState').addEventListener('input',()=>{STATE.cur.customer.state=$('custState').value;STATE.cur._stateManual=!!$('custState').value.trim();STATE.cur._pinState=false;markDirty();resolveTax();});
+  $('pincode').addEventListener('input',()=>{STATE.cur.customer.pincode=$('pincode').value;if(!$('custState').value.trim())STATE.cur._stateManual=false;markDirty();resolveTax();});
+  $('custCity').addEventListener('input',()=>{STATE.cur.customer.city=$('custCity').value;markDirty();resolveTax();});
+  // GSTIN entered -> state is encoded in the first 2 digits; set it authoritatively + GST treatment.
+  $('custGstin').addEventListener('input',()=>{const g=$('custGstin').value.trim();STATE.cur.customer.gstin=g;const st=stateFromGstin(g);if(st){STATE.cur.customer.state=st;if($('custState'))$('custState').value=st;STATE.cur._stateManual=true;STATE.cur._pinState=false;}markDirty();resolveTax();});
   $('roomCount').addEventListener('input',()=>{STATE.cur.customer.roomCount=$('roomCount').value===''?'':Number($('roomCount').value);syncRoomLicense();renderWizard();renderLines();markDirty();render();});
   $('couponSelect').addEventListener('change',e=>applyCoupon(e.target.value));
   $('custSearch').addEventListener('input',onCustSearch);
