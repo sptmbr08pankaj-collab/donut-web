@@ -614,6 +614,11 @@ function lineFrom(e,kind){return {itemId:e.itemId||e.item_id||'',name:e.name,des
 // Plan tiers: rooms included (Max=20, others=15) and per-extra-room license price by term.
 const BASE_ROOMS={starter:15,connect:15,advance:15,max:20,booster:20};
 const ROOM_ADDON_PRICE={quarter:{starter:200,connect:300,advance:400,max:600,booster:900},year:{starter:600,connect:900,advance:1200,max:2000,booster:2700}};
+// Real Zoho Billing "Additional Room License" addon ids (by term+tier) so room-license lines are
+// linked items — required for them to live in a Subscription Quote (a sub quote rejects unlinked lines).
+const ROOM_ADDON_ID={quarter:{starter:'3296275000001502779',connect:'3296275000001502823',advance:'3296275000003418058',max:'3296275000001502853',booster:'3296275000001502883'},
+  year:{starter:'3296275000001502808',connect:'3296275000001502838',advance:'3296275000003418066',max:'3296275000001502868',booster:'3296275000001502898'}};
+function roomLicenseAddonId(q){const plan=(q.lines||[]).find(l=>l.kind==='plan');if(!plan)return '';const term=(periodOf(plan.name,plan.unit)==='year')?'year':'quarter';const tier=planTier(plan.name);return (ROOM_ADDON_ID[term]&&ROOM_ADDON_ID[term][tier])||'';}
 function planTier(name){const s=String(name||'').toLowerCase();if(s.indexOf('booster')>=0)return 'booster';if(s.indexOf('max')>=0)return 'max';if(s.indexOf('advance')>=0)return 'advance';if(s.indexOf('connect')>=0)return 'connect';if(s.indexOf('starter')>=0)return 'starter';return '';}
 function planBaseRooms(name){return BASE_ROOMS[planTier(name)]||15;}
 function roomAddonPrice(name,term){const tm=(term==='year')?'year':'quarter';const t=planTier(name);return (ROOM_ADDON_PRICE[tm]&&ROOM_ADDON_PRICE[tm][t])||0;}
@@ -690,7 +695,7 @@ function syncRoomLicense(){
   const price=roomAddonPrice(plan.name,term);
   if(extra<=0||price<=0)return;
   const idx=q.lines.indexOf(plan);
-  q.lines.splice(idx+1,0,{itemId:'',name:'Additional Room License for '+(term==='year'?'Year':'Quarter'),desc:'',rate:price,qty:extra,perRoom:false,discountPct:0,gst:Number(plan.gst)||18,unit:(term==='year'?'years':'months'),kind:'addon',autoRoom:true,_open:false});
+  q.lines.splice(idx+1,0,{itemId:roomLicenseAddonId(q),name:'Additional Room License for '+(term==='year'?'Year':'Quarter'),desc:'',rate:price,qty:extra,perRoom:false,discountPct:0,gst:Number(plan.gst)||18,unit:(term==='year'?'years':'months'),kind:'addon',autoRoom:true,_open:false});
 }
 function computeStep(){const q=STATE.cur;
   if(q.lines.some(l=>l.kind==='plan')){STATE.step=2;STATE.path='plan';STATE.tab='addon';}
@@ -1070,7 +1075,10 @@ async function ensureZohoCustomer(q){
     throw e;
   }
 }
-function buildZohoLines(q){const t=compute(q);const tax=(q.taxMode==='inter')?ZOHO_IGST18:ZOHO_GST18;return t.lines.filter(l=>(l.qtyEff||0)>0).map(l=>{const li={name:String(l.name||'Item').slice(0,200),rate:Number(l.rate)||0,quantity:l.qtyEff,tax_id:tax,description:String(l.desc||'').slice(0,1800)};if(l.itemId)li.item_id=String(l.itemId);return li;});}
+// Resolve the best Billing item_id for a line (room-license lines fall back to the mapped addon id).
+function lineItemId(q,l){if(l.itemId)return String(l.itemId);if(isRoomLicense(l.name)){const id=roomLicenseAddonId(q);if(id)return id;}return '';}
+// withIds=true only for Subscription Quotes (every line must be a linked item). Regular quotes send ad-hoc lines.
+function buildZohoLines(q,withIds){const t=compute(q);const tax=(q.taxMode==='inter')?ZOHO_IGST18:ZOHO_GST18;return t.lines.filter(l=>(l.qtyEff||0)>0).map(l=>{const li={name:String(l.name||'Item').slice(0,200),rate:Number(l.rate)||0,quantity:l.qtyEff,tax_id:tax,description:String(l.desc||'').slice(0,1800)};if(withIds){const id=lineItemId(q,l);if(id)li.item_id=id;}return li;});}
 // Find the customer's primary contact-person id so the estimate can actually be emailed to them.
 async function getZohoContactPersonId(q){
   if(q.customer.zohoContactPersonId)return q.customer.zohoContactPersonId;
@@ -1090,13 +1098,17 @@ async function verifyEmailed(estId){
   }catch(e){return {emailed:false,status:'',url:''};}
 }
 async function pushToZoho(q,markSent){
-  const lines=buildZohoLines(q);if(!lines.length)throw new Error('no items');
-  const cid=await ensureZohoCustomer(q);const t=compute(q);
+  const t=compute(q);
+  // Subscription Quote requires a plan AND every line linked to a Billing item. If any line can't be
+  // linked (a custom/typed line), Zoho rejects the mix — so fall back to a regular Quote (ad-hoc lines).
+  const planLine=q.lines.find(l=>l.kind==='plan');
+  const billable=t.lines.filter(l=>(l.qtyEff||0)>0);
+  const subscription=!!planLine && billable.length>0 && billable.every(l=>!!lineItemId(q,l));
+  const lines=buildZohoLines(q,subscription);if(!lines.length)throw new Error('no items');
+  const cid=await ensureZohoCustomer(q);
   const cpid=await getZohoContactPersonId(q);
   const body={customer_id:cid,date:q.date,reference_number:String(q.number||''),notes:q.notes||'',terms:q.terms||'',line_items:lines,is_discount_before_tax:true};
-  // A quote with a plan -> Subscription Quote (estimate_type=new_subscription + interval); add-ons/services only -> regular Quote (omit estimate_type).
-  const planLine=q.lines.find(l=>l.kind==='plan');
-  if(planLine){const term=periodOf(planLine.name,planLine.unit);body.estimate_type='new_subscription';body.interval_unit=(term==='year')?'years':'months';}
+  if(subscription){const term=periodOf(planLine.name,planLine.unit);body.estimate_type='new_subscription';body.interval_unit=(term==='year')?'years':'months';}
   const pc=stateCode(q.customer.state);if(pc)body.place_of_supply=pc;
   if(q.poc)body.salesperson_name=q.poc;
   if(q.validUntil)body.expiry_date=q.validUntil;
