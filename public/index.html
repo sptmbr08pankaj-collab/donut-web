@@ -941,13 +941,20 @@ function renderLines(){
       tb.appendChild(dr);}
   });
   tb.querySelectorAll('input,textarea,select').forEach(inp=>{
-    const ev=(inp.tagName==='SELECT'||inp.type==='checkbox')?'change':'input';
-    inp.addEventListener(ev,e=>{const i=+e.target.dataset.i,k=e.target.dataset.k;let v=e.target.type==='checkbox'?e.target.checked:e.target.value;
+    const isToggle=(inp.tagName==='SELECT'||inp.type==='checkbox');
+    function setVal(e){const i=+e.target.dataset.i,k=e.target.dataset.k;let v=e.target.type==='checkbox'?e.target.checked:e.target.value;
       if(['rate','qty','discountPct','gst'].includes(k))v=v===''?'':Number(v);
       if(k==='qty'){const L=STATE.cur.lines[i];if(L.kind==='plan'||(L.kind==='addon'&&!L.autoRoom&&!isQrKit(L.name)))v=Math.min(2,Math.max(1,Number(v)||1));}
-      STATE.cur.lines[i][k]=v;markDirty();
-      if(['perRoom','rate','qty','discountPct','gst'].includes(k))renderLines();
-      render();});
+      STATE.cur.lines[i][k]=v;markDirty();}
+    if(isToggle){
+      // Selects / checkboxes don't involve typing — safe to rebuild the table immediately.
+      inp.addEventListener('change',e=>{setVal(e);renderLines();render();});
+    }else{
+      // While typing: update state + live totals only (do NOT rebuild the table, or focus is lost
+      // and multi-digit entry breaks). Rebuild once the field loses focus.
+      inp.addEventListener('input',e=>{setVal(e);render();});
+      inp.addEventListener('change',e=>{setVal(e);renderLines();render();});
+    }
   });
   tb.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{const idx=+b.dataset.del;const wasPlan=STATE.cur.lines[idx]&&STATE.cur.lines[idx].kind==='plan';STATE.cur.lines.splice(idx,1);if(wasPlan)syncRoomLicense();markDirty();renderLines();render();renderWizard();});
   tb.querySelectorAll('[data-tog]').forEach(b=>b.onclick=()=>{const i=+b.dataset.tog;STATE.cur.lines[i]._open=!STATE.cur.lines[i]._open;renderLines();});
