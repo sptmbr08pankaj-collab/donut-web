@@ -246,8 +246,11 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
     <div class="card">
       <h3>Discount <span class="spacer"></span><button id="hideDiscBtn" class="ghost" style="padding:3px 10px;font-size:12px">🙈 Hide</button></h3>
       <div id="discBody">
-        <div><label>Zoho coupon / discount</label><select id="couponSelect"></select></div>
-        <div class="hint" style="margin-top:6px">Only discounts created in Zoho can be applied — no manual discounts.</div>
+        <div><label>Discount % <span style="color:#94a3b8">(1–30, must match an approved discount)</span></label>
+          <input id="discPctInput" type="number" min="1" max="30" step="1" inputmode="numeric" placeholder="e.g. 10">
+          <div id="discPctMsg" class="hint" style="margin-top:4px"></div></div>
+        <div style="margin-top:8px"><label>Zoho coupon / discount</label><select id="couponSelect"></select></div>
+        <div class="hint" style="margin-top:6px">A manual % is applied only if it matches a discount that exists in Zoho. Coupons created in Zoho can also be applied.</div>
       </div>
       <div id="discHidden" class="hint" style="display:none">🙈 Discount hidden for screen-sharing — totals show net price only. <a href="#" id="showDiscLink">Show discount</a></div>
     </div>
@@ -823,7 +826,24 @@ function applyCoupon(code){
     if(c.percent){STATE.cur.overallDiscType='pct';STATE.cur.overallDiscValue=c.percent;}
     else if(c.amount){STATE.cur.overallDiscType='flat';STATE.cur.overallDiscValue=c.amount;}
     else{STATE.cur.overallDiscType='pct';STATE.cur.overallDiscValue=0;}}
+  // Keep the manual % bar in sync with the chosen coupon.
+  if($('discPctInput'))$('discPctInput').value=(STATE.cur.overallDiscType==='pct'&&STATE.cur.overallDiscValue)?STATE.cur.overallDiscValue:'';
+  if($('discPctMsg'))$('discPctMsg').textContent='';
   markDirty();render();
+}
+// Approved discount percentages = the percentage-type coupons in Zoho, within 1–30%.
+function allowedDiscPercents(){const s=new Set();((STATE.catalog&&STATE.catalog.coupons)||[]).forEach(c=>{const p=Math.round(Number(c.percent)||0);if(p>=1&&p<=30)s.add(p);});return s;}
+function applyDiscPct(raw){
+  const q=STATE.cur,msg=$('discPctMsg');const setMsg=(t,col)=>{if(msg){msg.textContent=t;msg.style.color=col;}};
+  // Any manual % overrides a previously selected coupon.
+  q.coupon=null;if($('couponSelect'))$('couponSelect').value='';
+  const str=String(raw==null?'':raw).trim();
+  if(str===''){q.overallDiscType='pct';q.overallDiscValue=0;setMsg('','var(--muted)');markDirty();render();return;}
+  const v=Math.round(Number(str)||0);
+  if(v<1||v>30){q.overallDiscType='pct';q.overallDiscValue=0;setMsg('Discount must be between 1% and 30% — not applied.','var(--danger)');markDirty();render();return;}
+  const allowed=allowedDiscPercents();
+  if(!allowed.has(v)){q.overallDiscType='pct';q.overallDiscValue=0;const list=[...allowed].sort((a,b)=>a-b).join('%, ');setMsg(v+'% is not an approved discount'+(list?(' — approved: '+list+'%'):'')+'. Not applied.','var(--danger)');markDirty();render();return;}
+  q.overallDiscType='pct';q.overallDiscValue=v;setMsg('✓ '+v+'% discount applied.','var(--ok)');markDirty();render();
 }
 function renderPocList(){const dl=$('pocList');dl.innerHTML='';const names=Array.from(new Set((STATE.catalog.pocs||[]).concat(['abhinav'])));names.forEach(n=>{const o=document.createElement('option');o.value=n;dl.appendChild(o);});}
 
@@ -1149,7 +1169,7 @@ function noteBodyHtml(q){
     'Prepared by: '+esc(q.poc||'-')+'<br><ul>'+rows+'</ul>'+
     (t.overall>0?('Discount'+(q.overallDiscType==='pct'&&Number(q.overallDiscValue)>0?(' ('+Number(q.overallDiscValue)+'%)'):'')+(q.coupon?(' '+esc(q.coupon.code)):'')+': − '+fmtINR(t.overall)+'<br>'):'')+
     (intra?('CGST: '+fmtINR(t.totalTax/2)+' · SGST: '+fmtINR(t.totalTax/2)):('IGST: '+fmtINR(t.totalTax)))+'<br>'+
-    '<b>Total: '+fmtINR(t.grand)+'</b>'+(q.zohoEstimateNumber?('<br>Zoho estimate: '+esc(q.zohoEstimateNumber)):'')+(q.paid?('<br><b>✅ Payment received: '+fmtINR(q.paidAmount)+' on '+esc(q.paidAt)+(q.paymentId?(' · '+esc(q.paymentId)):'')+' — Converted</b>'):'');
+    '<b>Total: '+fmtINR(t.grand)+'</b>'+(q.zohoEstimateNumber?('<br>Zoho estimate: '+esc(q.zohoEstimateNumber)):'')+(q.zohoPayLinkUrl?('<br>💳 Payment link: <a href="'+esc(q.zohoPayLinkUrl)+'">'+esc(q.zohoPayLinkUrl)+'</a>'):'')+(q.paid?('<br><b>✅ Payment received: '+fmtINR(q.paidAmount)+' on '+esc(q.paidAt)+(q.paymentId?(' · '+esc(q.paymentId)):'')+' — Converted</b>'):'');
 }
 function extractId(r){try{const cands=[r&&r.results,r&&r.createdObjects,r&&r.objects,r&&r.data&&r.data.results,r&&r.data&&r.data.objects];for(const arr of cands){if(Array.isArray(arr)&&arr[0])return arr[0].id||arr[0].objectId||(arr[0].properties&&arr[0].properties.hs_object_id);}if(r&&(r.id||r.objectId))return r.id||r.objectId;}catch(e){}return null;}
 async function ensureHubspotContact(q){
@@ -1218,9 +1238,11 @@ async function copyPayLink(){
     const u=pl.url||'';
     if(!u)throw new Error((r&&(r.message||r.error))||'Zoho did not return a link');
     q.zohoPayLinkUrl=u;q.zohoPayLinkId=pl.payment_link_id||'';persistCur();refreshQuoteSelect();
-    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(u).then(function(){flash('💳 Payment link for '+fmtINR(amt)+' copied — send it to the customer to Pay Now.');},function(){window.open(u,'_blank');});}
+    // Log/refresh the payment link on the customer's HubSpot note.
+    let hsNote='';try{const hid=await ensureHubspotContact(q);if(hid){await pushToHubspotNote(q);persistCur();hsNote=' · logged to HubSpot';}}catch(e){hsNote=' · HubSpot note failed: '+e.message;}
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(u).then(function(){flash('💳 Payment link for '+fmtINR(amt)+' copied — send it to the customer to Pay Now.'+hsNote);},function(){window.open(u,'_blank');});}
     else window.open(u,'_blank');
-    setSync('Payment link ready ('+fmtINR(amt)+').',false);
+    setSync('Payment link ready ('+fmtINR(amt)+')'+hsNote+'.',false);
   }catch(e){setSync('',false);flash('Could not create payment link: '+e.message,true);}
 }
 async function markPaid(q,p){
@@ -1259,6 +1281,7 @@ function syncFormFromState(){
   $('roomCount').value=c.roomCount;$('custCity').value=c.city;$('custState').value=c.state;$('pincode').value=c.pincode||'';$('custGstin').value=c.gstin;$('taxMode').value=q.taxMode;
   $('quoteNumber').value=q.number;$('quoteDate').value=q.date;$('validUntil').value=q.validUntil;$('pocName').value=q.poc||'';$('subject').value=q.subject||'';
   $('couponSelect').value=q.coupon?q.coupon.code:'';
+  if($('discPctInput')){$('discPctInput').value=(q.overallDiscType==='pct'&&Number(q.overallDiscValue)>0&&!q.coupon)?q.overallDiscValue:'';if($('discPctMsg'))$('discPctMsg').textContent='';}
   $('notes').value=q.notes;$('terms').value=q.terms;renderLines();
 }
 function syncStateFromForm(){
@@ -1317,6 +1340,7 @@ function bindForm(){
   $('custGstin').addEventListener('input',()=>{const g=$('custGstin').value.trim();STATE.cur.customer.gstin=g;const st=stateFromGstin(g);if(st){STATE.cur.customer.state=st;if($('custState'))$('custState').value=st;STATE.cur._stateManual=true;STATE.cur._pinState=false;}markDirty();resolveTax();});
   $('roomCount').addEventListener('input',()=>{STATE.cur.customer.roomCount=$('roomCount').value===''?'':Number($('roomCount').value);syncRoomLicense();renderWizard();renderLines();markDirty();render();});
   $('couponSelect').addEventListener('change',e=>applyCoupon(e.target.value));
+  {const di=$('discPctInput');if(di)di.addEventListener('input',e=>applyDiscPct(e.target.value));}
   $('custSearch').addEventListener('input',onCustSearch);
   document.addEventListener('click',e=>{if(!$('custResults').contains(e.target)&&e.target!==$('custSearch'))$('custResults').className='dropdown';});
   $('zohoMatchBtn').onclick=matchZoho;
