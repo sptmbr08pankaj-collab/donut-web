@@ -501,7 +501,7 @@ function parseRooms(p){
 function blankQuote(){
   return {id:uid(),number:'',saved:false,date:todayISO(),validUntil:addDays(todayISO(),15),
     poc:(localStorage.getItem(POC_KEY)||'abhinav'),subject:'',
-    zohoEstimateId:'',zohoEstimateNumber:'',zohoEstimateUrl:'',zohoCustomerId:'',hubspotNoteId:'',zohoStatus:'',zohoEmailed:false,zohoSendError:'',paid:false,paymentId:'',paidAt:'',paidAmount:0,
+    zohoEstimateId:'',zohoEstimateNumber:'',zohoEstimateUrl:'',zohoPayLinkUrl:'',zohoPayLinkId:'',zohoCustomerId:'',hubspotNoteId:'',zohoStatus:'',zohoEmailed:false,zohoSendError:'',paid:false,paymentId:'',paidAt:'',paidAmount:0,
     customer:{name:'',email:'',phone:'',address:'',city:'',state:'',pincode:'',gstin:'',roomCount:'',propertyName:'',hubspotId:'',zohoId:'',zohoContactPersonId:'',ownerId:''},
     taxMode:'intra',lines:[],coupon:null,overallDiscType:'pct',overallDiscValue:0,
     notes:'Looking forward to your business.',terms:'50% advance to confirm onboarding. Prices valid for 15 days. GST as applicable.'};
@@ -1151,11 +1151,29 @@ async function syncExternal(opts){
   STATE.syncing=false;
 }
 /* ---------- Razorpay payment link + reconciliation ---------- */
-function copyPayLink(){
-  const u=STATE.cur.zohoEstimateUrl;
-  if(!u){flash('Save or Send to Zoho first — that generates the payment link.',true);return;}
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(u).then(function(){flash('Payment link copied — customer pays via Razorpay on the Zoho page.');},function(){window.open(u,'_blank');});}
-  else window.open(u,'_blank');
+async function copyPayLink(){
+  const q=STATE.cur;
+  // Reuse an already-generated link for this quote if present.
+  if(q.zohoPayLinkUrl){
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(q.zohoPayLinkUrl).then(function(){flash('💳 Payment link copied — send it to the customer to Pay Now.');},function(){window.open(q.zohoPayLinkUrl,'_blank');});}
+    else window.open(q.zohoPayLinkUrl,'_blank');
+    return;
+  }
+  const t=compute(q);const amt=Number(t.grand)||0;
+  if(amt<=0){flash('Add items to the quote first — there is nothing to charge.',true);return;}
+  try{
+    setSync('Generating Zoho payment link…',true);
+    const cid=await ensureZohoCustomer(q);
+    const desc=('DigiStay Quotation '+(q.number||'')+(q.customer.propertyName?(' · '+q.customer.propertyName):'')).slice(0,100);
+    const r=await call(ZOHO+'__billing_create_payment_link',{body:{customer_id:cid,payment_amount:String(amt.toFixed(2)),description:desc}});
+    const pl=(r&&r.payment_link)||(r&&r.data&&r.data.payment_link)||{};
+    const u=pl.url||'';
+    if(!u)throw new Error((r&&(r.message||r.error))||'Zoho did not return a link');
+    q.zohoPayLinkUrl=u;q.zohoPayLinkId=pl.payment_link_id||'';persistCur();refreshQuoteSelect();
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(u).then(function(){flash('💳 Payment link for '+fmtINR(amt)+' copied — send it to the customer to Pay Now.');},function(){window.open(u,'_blank');});}
+    else window.open(u,'_blank');
+    setSync('Payment link ready ('+fmtINR(amt)+').',false);
+  }catch(e){setSync('',false);flash('Could not create payment link: '+e.message,true);}
 }
 async function markPaid(q,p){
   q.paid=true;q.paymentId=p.id||'';q.paidAmount=(Number(p.amount)||0)/100;q.paidAt=new Date((Number(p.created_at)||Date.now()/1000)*1000).toISOString().slice(0,10);q.zohoStatus='paid';

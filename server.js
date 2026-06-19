@@ -109,13 +109,15 @@ async function zohoToken() {
 // Zoho Billing (Subscriptions) — plans/add-ons/coupons catalog. Uses the same OAuth
 // token (the refresh token must carry the ZohoSubscriptions scope) plus the org header.
 async function billing(op, args) {
-  const qp = args.query_params || {}, pv = args.path_variables || {};
+  const qp = args.query_params || {}, pv = args.path_variables || {}, body = args.body || {};
   let path = "", method = "GET";
   switch (op) {
     case "list_plans": path = "/plans"; break;
     case "list_addons": path = "/addons"; break;
     case "list_coupons": path = "/coupons"; break;
     case "get_plan": path = "/plans/" + pv.plan_code; break;
+    case "list_payment_links": path = "/paymentlinks"; break;
+    case "create_payment_link": path = "/paymentlinks"; method = "POST"; break;
     default: throw new Error("Unsupported Billing op: " + op);
   }
   const q = new URLSearchParams();
@@ -125,8 +127,12 @@ async function billing(op, args) {
     Authorization: "Zoho-oauthtoken " + (await zohoToken()),
     "X-com-zoho-subscriptions-organizationid": ZOHO_ORG_ID || "",
   };
-  const r = await fetch(url, { method, headers });
-  return await r.json();
+  let fetchBody;
+  if (method === "POST" || method === "PUT") { fetchBody = JSON.stringify(body); headers["Content-Type"] = "application/json"; }
+  const r = await fetch(url, { method, headers, body: fetchBody });
+  const data = await r.json();
+  if (data && typeof data.code === "number" && data.code !== 0) throw new Error(data.message || ("Zoho Billing error " + data.code));
+  return data;
 }
 
 // The frontend speaks the Books "contact" vocabulary; Zoho Billing speaks "customer".
