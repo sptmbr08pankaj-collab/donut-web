@@ -247,7 +247,7 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
       <h3>Discount <span class="spacer"></span><button id="hideDiscBtn" class="ghost" style="padding:3px 10px;font-size:12px">🙈 Hide</button></h3>
       <div id="discBody">
         <div><label>Discount % <span style="color:#94a3b8">(1–30, must match an approved discount)</span></label>
-          <input id="discPctInput" type="number" min="1" max="30" step="1" inputmode="numeric" placeholder="e.g. 10">
+          <input id="discPctInput" type="number" min="1" max="30" step="any" inputmode="decimal" placeholder="e.g. 22.6">
           <div id="discPctMsg" class="hint" style="margin-top:4px"></div></div>
         <div style="margin-top:8px"><label>Zoho coupon / discount</label><select id="couponSelect"></select></div>
         <div class="hint" style="margin-top:6px">A manual % is applied only if it matches a discount that exists in Zoho. Coupons created in Zoho can also be applied.</div>
@@ -831,18 +831,18 @@ function applyCoupon(code){
   if($('discPctMsg'))$('discPctMsg').textContent='';
   markDirty();render();
 }
-// Approved discount percentages = the percentage-type coupons in Zoho, within 1–30%.
-function allowedDiscPercents(){const s=new Set();((STATE.catalog&&STATE.catalog.coupons)||[]).forEach(c=>{const p=Math.round(Number(c.percent)||0);if(p>=1&&p<=30)s.add(p);});return s;}
+// Approved discount percentages = the percentage-type coupons in Zoho, within 1–30% (exact values, not rounded).
+function allowedDiscPercents(){const a=[];((STATE.catalog&&STATE.catalog.coupons)||[]).forEach(c=>{const p=Number(c.percent);if(isFinite(p)&&p>=1&&p<=30)a.push(p);});return a;}
 function applyDiscPct(raw){
   const q=STATE.cur,msg=$('discPctMsg');const setMsg=(t,col)=>{if(msg){msg.textContent=t;msg.style.color=col;}};
   // Any manual % overrides a previously selected coupon.
   q.coupon=null;if($('couponSelect'))$('couponSelect').value='';
   const str=String(raw==null?'':raw).trim();
   if(str===''){q.overallDiscType='pct';q.overallDiscValue=0;setMsg('','var(--muted)');markDirty();render();return;}
-  const v=Math.round(Number(str)||0);
-  if(v<1||v>30){q.overallDiscType='pct';q.overallDiscValue=0;setMsg('Discount must be between 1% and 30% — not applied.','var(--danger)');markDirty();render();return;}
-  const allowed=allowedDiscPercents();
-  if(!allowed.has(v)){q.overallDiscType='pct';q.overallDiscValue=0;const list=[...allowed].sort((a,b)=>a-b).join('%, ');setMsg(v+'% is not an approved discount'+(list?(' — approved: '+list+'%'):'')+'. Not applied.','var(--danger)');markDirty();render();return;}
+  const v=Number(str);
+  // Use the exact figure entered (no rounding); approve only if it matches an existing Zoho discount within 1–30%.
+  const ok=isFinite(v)&&v>=1&&v<=30&&allowedDiscPercents().some(p=>Math.abs(p-v)<1e-9);
+  if(!ok){q.overallDiscType='pct';q.overallDiscValue=0;setMsg(str+'% is not an approved discount. Not applied.','var(--danger)');markDirty();render();return;}
   q.overallDiscType='pct';q.overallDiscValue=v;setMsg('✓ '+v+'% discount applied.','var(--ok)');markDirty();render();
 }
 function renderPocList(){const dl=$('pocList');dl.innerHTML='';const names=Array.from(new Set((STATE.catalog.pocs||[]).concat(['abhinav'])));names.forEach(n=>{const o=document.createElement('option');o.value=n;dl.appendChild(o);});}
