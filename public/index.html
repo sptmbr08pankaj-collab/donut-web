@@ -1715,8 +1715,8 @@ function compute(){
       it.units+=l.qty;it.revenue+=l.total;it.orders++;if(l.type===1)it.type=1;else if(l.type===2&&it.type!==1)it.type=2;
       if(l.type===1){const tm=termOf(l);if(tm){term[tm].units+=l.qty;term[tm].rev+=l.total;term[tm].n++;const tk=tm+'|'+k;const ti=termItems[tk]||(termItems[tk]={name:l.name,term:tm,units:0,revenue:0,orders:0});ti.units+=l.qty;ti.revenue+=l.total;ti.orders++;}}
     });});
-  POCS=Object.values(P).map(p=>({name:p.name,count:p.count,quoted:p.quoted,accepted:p.accepted,custQ:Object.keys(p.custQ).length,custA:Object.keys(p.custA).length,
-    disc:p.discSum,avgDisc:p.discCount?p.discPctSum/p.discCount:0,discCount:p.discCount,aov:p.count?p.quoted/p.count:0,detN:p.scanN}));
+  POCS=Object.values(P).map(p=>{const cq=Object.keys(p.custQ).length;return {name:p.name,count:p.count,quoted:p.quoted,accepted:p.accepted,custQ:cq,custA:Object.keys(p.custA).length,
+    disc:p.discSum,avgDisc:p.discCount?p.discPctSum/p.discCount:0,discCount:p.discCount,aov:cq?p.quoted/cq:0,detN:p.scanN};});
   ITEMS=Object.values(items).map(it=>({name:it.name,type:it.type,units:it.units,revenue:it.revenue,orders:it.orders,aov:it.orders?it.revenue/it.orders:0}));
   TERM=term;TERMITEMS=Object.values(termItems);
   const ddisc=FDET.filter(d=>d.discount_percent>0);
@@ -1724,7 +1724,7 @@ function compute(){
     custA:Object.keys(FACC.reduce((m,e)=>{if(e.customer_id)m[e.customer_id]=1;return m;},{})).length,
     custQ:Object.keys(FSUM.reduce((m,e)=>{if(e.customer_id)m[e.customer_id]=1;return m;},{})).length,
     disc:POCS.reduce((a,p)=>a+p.disc,0),avgDisc:ddisc.length?ddisc.reduce((a,d)=>a+d.discount_percent,0)/ddisc.length:0,discCount:ddisc.length,detN:FDET.length};
-  ORGM.aov=ORGM.count?ORGM.quoted/ORGM.count:0;
+  ORGM.aov=ORGM.custQ?ORGM.quoted/ORGM.custQ:0;
   // Realized revenue = actual payments received in Zoho, bucketed by payment date (org-level; payments carry no POC).
   const PFILT=PAY.filter(v=>inFilter(String(v.date||'').slice(0,10),f)&&pocPass(payPoc(v)));
   ORGM.realized=PFILT.reduce((a,v)=>a+(Number(v.amount)||0),0);ORGM.realizedCount=PFILT.length;
@@ -1732,7 +1732,7 @@ function compute(){
 
 function orgCards(){const m=ORGM;const c=[['Quotations',String(m.count),''],['Quoted value',fmtINR(m.quoted),''],['Accepted / invoiced',fmtINR(m.accepted),'value won'],
   ['Realized revenue',fmtINR(m.realized||0),(m.realizedCount||0)+' payments received'],
-  ['Customers acquired',String(m.custA),m.custQ+' quoted'],['Total discount',fmtINR(m.disc),'over '+m.detN+' scanned'],['Avg discount %',m.avgDisc.toFixed(1)+'%','on '+m.discCount+' discounted quotes'],['AOV',fmtINR(m.aov),'per quotation']];
+  ['Customers acquired',String(m.custA),m.custQ+' quoted'],['Total discount',fmtINR(m.disc),'over '+m.detN+' scanned'],['Avg discount %',m.avgDisc.toFixed(1)+'%','on '+m.discCount+' discounted quotes'],['AOV',fmtINR(m.aov),'per customer']];
   const _sv=p=>'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
   const KPI=[
     {c:'#2563eb',i:_sv('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>')},
@@ -1905,7 +1905,7 @@ function render(){
   itemTable('addonTable',ITEMS.filter(i=>i.type!==1));
   aovTable();renderCharts();dueTable();termCards();termTable('termQTable','quarter');termTable('termYTable','year');
   $('sumScope').textContent='· '+periodLabel()+' · '+statusLabel();
-  $('pocNote').textContent='AOV = quoted value ÷ quotations. Customers = distinct customers on accepted/invoiced quotes. Avg disc % is averaged over discounted quotes only. Click a column header to sort.';
+  $('pocNote').textContent='AOV = total quoted value ÷ distinct customers (multiple quotations for the same customer count as one). Customers = distinct customers on accepted/invoiced quotes. Avg disc % is averaged over discounted quotes only. Click a column header to sort.';
   $('caveat').innerHTML='Counts, value, AOV, customers and ranks use <b>all quotations in the selected period</b> (grouped by salesperson). Discount, plan/add-on, term and per-item figures use <b>'+detRows().length+' scanned quotations</b> — for a specific period every quote in that period is scanned (so older months like May are fully covered). Trends (month-on-month & year-on-year) reflect the selected POC and status. Outstanding payments come from Zoho invoices.';
 }
 async function build(force){
