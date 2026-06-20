@@ -1821,7 +1821,10 @@ function renderCharts(){var __vd=document.getElementById('view-dashboard');if(__
   const data=keys.map(k=>mAll[k][metric]);
   $('momScope').textContent='· last '+(keys.length||0)+' months';
   momC=makeChart('momChart','bar',labels,[{label:mlabel,data:data,backgroundColor:'#0f766e',borderRadius:4}],money,momC);
-  const years=Array.from(new Set(SUM.map(e=>String(e.date||'').slice(0,4)).filter(y=>/^\d{4}$/.test(y)))).sort();
+  // Only draw year-lines that actually have data for the current filter (POC/status/metric) — so a
+  // selected POC shows only the years they were active, not flat-zero lines for every year.
+  const allYears=Array.from(new Set(SUM.map(e=>String(e.date||'').slice(0,4)).filter(y=>/^\d{4}$/.test(y)))).sort();
+  const years=allYears.filter(y=>MONTHS.some((_,i)=>(mAll[y+'-'+String(i+1).padStart(2,'0')]||{})[metric]));
   const ds=years.map((y,idx)=>({label:y,data:MONTHS.map((_,i)=>{const k=y+'-'+String(i+1).padStart(2,'0');return mAll[k]?mAll[k][metric]:0;}),borderColor:PAL[idx%PAL.length],backgroundColor:PAL[idx%PAL.length],tension:.3,fill:false,pointRadius:2}));
   yoyC=makeChart('yoyChart','line',MONTHS,ds,money,yoyC);
 }
@@ -1883,7 +1886,7 @@ function render(){
   aovTable();renderCharts();dueTable();termCards();termTable('termQTable','quarter');termTable('termYTable','year');
   $('sumScope').textContent='· '+periodLabel()+' · '+statusLabel();
   $('pocNote').textContent='AOV = quoted value ÷ quotations. Customers = distinct customers on accepted/invoiced quotes. Avg disc % is averaged over discounted quotes only. Click a column header to sort.';
-  $('caveat').innerHTML='Counts, value, AOV, customers and ranks use <b>all quotations in the selected period</b> (grouped by salesperson). Discount, plan/add-on, term and per-item figures use <b>'+detRows().length+' scanned quotations</b> — for a specific period every quote in that period is scanned (so older months like May are fully covered). Trends use every quotation. Outstanding payments come from Zoho invoices.';
+  $('caveat').innerHTML='Counts, value, AOV, customers and ranks use <b>all quotations in the selected period</b> (grouped by salesperson). Discount, plan/add-on, term and per-item figures use <b>'+detRows().length+' scanned quotations</b> — for a specific period every quote in that period is scanned (so older months like May are fully covered). Trends (month-on-month & year-on-year) reflect the selected POC and status. Outstanding payments come from Zoho invoices.';
 }
 async function build(force){
   $('dashRebuild').disabled=true;
