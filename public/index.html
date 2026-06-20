@@ -1551,10 +1551,12 @@ async function call(name,args){
 }
 function setStatus(m){$('status').textContent=m;}
 // Current organization POCs (anyone else with quotes is grouped as Ex-Employees).
-const ACTIVE_POCS=['Abhinav Gupta','Ajay Kulhari','Ajitesh Kashyap','Ekshit Madan','Kaushik Chatterjee','Pankaj Chamoli','Shreya Gupta','Suraj Shukla'];
+const ACTIVE_POCS=['Abhinav Gupta','Ajay Kulhari','Ajitesh Kashyap','Ekshit Madan','Kaushik Chatterjee','Pankaj Chamoli','Shreya Jindal','Suraj Shukla'];
 const _ACTIVE_LC={};ACTIVE_POCS.forEach(n=>{_ACTIVE_LC[n.toLowerCase()]=n;});
-// Canonical POC name: trim + collapse whitespace, and map known names to one spelling (merges duplicates).
-function canonPoc(name){const t=String(name||'').trim().replace(/\s+/g,' ');if(!t)return '(Unassigned)';return _ACTIVE_LC[t.toLowerCase()]||t;}
+// Misspelled/old names mapped to the correct POC so their historical quotes merge under the right name.
+const POC_ALIASES={'shreya gupta':'Shreya Jindal'};
+// Canonical POC name: trim + collapse whitespace, apply aliases, and map known names to one spelling.
+function canonPoc(name){const t=String(name||'').trim().replace(/\s+/g,' ');if(!t)return '(Unassigned)';const lc=t.toLowerCase();return POC_ALIASES[lc]||_ACTIVE_LC[lc]||t;}
 const sp=e=>canonPoc(e.salesperson_name);
 const isAcc=s=>ACCEPTED.indexOf(String(s||'').toLowerCase())>=0;
 
