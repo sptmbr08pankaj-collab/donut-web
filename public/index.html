@@ -1573,6 +1573,17 @@ const sp=e=>canonPoc(e.salesperson_name);
 const isAcc=s=>ACCEPTED.indexOf(String(s||'').toLowerCase())>=0;
 // Date a quote was actually accepted/paid (used for monthly tracking of accepted value), not the quote date.
 const acceptedDate=e=>String((e&&(e.accepted_date||e.last_modified_time||e.date))||'').slice(0,10);
+// Map each customer to the POC who owns their quotation (prefer the latest accepted/invoiced quote).
+// Used to attribute payments (which carry no salesperson) to a POC for the POC filter.
+let CUSTPOC=null;
+function custPocMap(){
+  if(CUSTPOC)return CUSTPOC;
+  const arr=SUM.slice().sort((a,b)=>{const aa=isAcc(a.status)?1:0,ba=isAcc(b.status)?1:0;if(aa!==ba)return ba-aa;
+    const da=(isAcc(a.status)?acceptedDate(a):String(a.date||'')),db=(isAcc(b.status)?acceptedDate(b):String(b.date||''));return db.localeCompare(da);});
+  const m={};arr.forEach(e=>{const cid=e.customer_id;if(cid&&!(cid in m))m[cid]=sp(e);});
+  CUSTPOC=m;return m;
+}
+function payPoc(v){return (v&&v.customer_id&&custPocMap()[v.customer_id])||'(Unassigned)';}
 
 async function loadSummaries(){
   setStatus('Loading quotations…');let all=[],page=1;
@@ -1583,7 +1594,7 @@ async function loadSummaries(){
     setStatus('Loading quotations… '+all.length);
     if(!arr.length||pc.has_more_page===false||arr.length<200)break;page++;
   }
-  SUM=all.filter(e=>isTrackable(e.status));populateYears();
+  SUM=all.filter(e=>isTrackable(e.status));CUSTPOC=null;populateYears();
 }
 const PERIOD_SCAN=700,DEFAULT_SCAN=300;
 function loadDetMap(){try{const c=JSON.parse(localStorage.getItem(DET_KEY)||'null');if(c&&c.map&&(Date.now()-c.at<2*864e5))DETMAP=c.map;}catch(e){}}
@@ -1684,7 +1695,7 @@ function compute(){
     disc:POCS.reduce((a,p)=>a+p.disc,0),avgDisc:ddisc.length?ddisc.reduce((a,d)=>a+d.discount_percent,0)/ddisc.length:0,discCount:ddisc.length,detN:FDET.length};
   ORGM.aov=ORGM.count?ORGM.quoted/ORGM.count:0;
   // Realized revenue = actual payments received in Zoho, bucketed by payment date (org-level; payments carry no POC).
-  const PFILT=PAY.filter(v=>inFilter(String(v.date||'').slice(0,10),f));
+  const PFILT=PAY.filter(v=>inFilter(String(v.date||'').slice(0,10),f)&&pocPass(payPoc(v)));
   ORGM.realized=PFILT.reduce((a,v)=>a+(Number(v.amount)||0),0);ORGM.realizedCount=PFILT.length;
 }
 
@@ -1709,13 +1720,14 @@ function orgCards(){const m=ORGM;const c=[['Quotations',String(m.count),''],['Qu
 function openDrill(metric,pocOverride){
   const f=activeFilter(),st=STATUSF;
   if(metric==='realized'){
-    let plist=PAY.filter(v=>inFilter(String(v.date||'').slice(0,10),f)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    const pocFilt=e=>pocOverride?payPoc(e)===pocOverride:pocPass(payPoc(e));
+    let plist=PAY.filter(v=>inFilter(String(v.date||'').slice(0,10),f)&&pocFilt(v)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
     let psum=0;const prows=plist.map(v=>{const a=Number(v.amount)||0;psum+=a;
-      return '<tr><td style="text-align:left">'+esc(v.customer_name||'')+'</td><td style="text-align:left">'+esc(String(v.date||'').slice(0,10))+'</td><td style="text-align:left">'+esc(v.mode||'')+'</td><td style="text-align:left">'+esc(v.payment_number||v.invoice_number||'')+'</td><td>'+fmtINR(a)+'</td></tr>';}).join('');
-    const phead='<tr><th style="text-align:left">Customer</th><th style="text-align:left">Date</th><th style="text-align:left">Mode</th><th style="text-align:left">Ref</th><th>Amount received</th></tr>';
-    const pfoot='<tr style="font-weight:700;border-top:2px solid var(--line)"><td style="text-align:left" colspan="4">'+plist.length+' payment(s)</td><td>'+fmtINR(psum)+'</td></tr>';
+      return '<tr><td style="text-align:left">'+esc(v.customer_name||'')+'</td><td style="text-align:left">'+esc(payPoc(v))+'</td><td style="text-align:left">'+esc(String(v.date||'').slice(0,10))+'</td><td style="text-align:left">'+esc(v.mode||'')+'</td><td style="text-align:left">'+esc(v.payment_number||v.invoice_number||'')+'</td><td>'+fmtINR(a)+'</td></tr>';}).join('');
+    const phead='<tr><th style="text-align:left">Customer</th><th style="text-align:left">POC</th><th style="text-align:left">Date</th><th style="text-align:left">Mode</th><th style="text-align:left">Ref</th><th>Amount received</th></tr>';
+    const pfoot='<tr style="font-weight:700;border-top:2px solid var(--line)"><td style="text-align:left" colspan="5">'+plist.length+' payment(s)</td><td>'+fmtINR(psum)+'</td></tr>';
     $('drillTitle').textContent='Realized revenue · '+periodLabel();
-    $('drillBody').innerHTML=plist.length?('<div class="panel" style="overflow-x:auto"><table>'+phead+prows+pfoot+'</table></div><div class="note">Actual payments received in Zoho, by payment date.</div>'):'<div class="empty">No payments received in this period.</div>';
+    $('drillBody').innerHTML=plist.length?('<div class="panel" style="overflow-x:auto"><table>'+phead+prows+pfoot+'</table></div><div class="note">Payments received in Zoho (by payment date), attributed to the POC on the customer’s quotation.</div>'):'<div class="empty">No payments received for this selection in this period.</div>';
     $('drillModal').style.display='flex';return;
   }
   const pocOk=e=>pocOverride?sp(e)===pocOverride:pocPass(sp(e));
