@@ -1549,7 +1549,7 @@ const fmtINR=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits
 const fmtINR2=n=>'₹'+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function fmtShort(v){v=Number(v)||0;const a=Math.abs(v);if(a>=1e7)return (v/1e7).toFixed(1)+'Cr';if(a>=1e5)return (v/1e5).toFixed(1)+'L';if(a>=1e3)return (v/1e3).toFixed(0)+'k';return String(Math.round(v));}
-let SUM=[],DETMAP={},INV=[],POCS=[],ITEMS=[],ORGM={},SORT={key:'accepted',dir:-1},momC=null,yoyC=null;
+let SUM=[],DETMAP={},INV=[],PAY=[],POCS=[],ITEMS=[],ORGM={},SORT={key:'accepted',dir:-1},momC=null,yoyC=null;
 let PERIOD='all',STATUSF='nondraft',METRIC='quoted',CFROM='',CTO='';
 let POCSEL=new Set();
 let TERM={quarter:{units:0,rev:0,n:0},year:{units:0,rev:0,n:0}},TERMITEMS=[];
@@ -1683,26 +1683,41 @@ function compute(){
     custQ:Object.keys(FSUM.reduce((m,e)=>{if(e.customer_id)m[e.customer_id]=1;return m;},{})).length,
     disc:POCS.reduce((a,p)=>a+p.disc,0),avgDisc:ddisc.length?ddisc.reduce((a,d)=>a+d.discount_percent,0)/ddisc.length:0,discCount:ddisc.length,detN:FDET.length};
   ORGM.aov=ORGM.count?ORGM.quoted/ORGM.count:0;
+  // Realized revenue = actual payments received in Zoho, bucketed by payment date (org-level; payments carry no POC).
+  const PFILT=PAY.filter(v=>inFilter(String(v.date||'').slice(0,10),f));
+  ORGM.realized=PFILT.reduce((a,v)=>a+(Number(v.amount)||0),0);ORGM.realizedCount=PFILT.length;
 }
 
 function orgCards(){const m=ORGM;const c=[['Quotations',String(m.count),''],['Quoted value',fmtINR(m.quoted),''],['Accepted / invoiced',fmtINR(m.accepted),'value won'],
+  ['Realized revenue',fmtINR(m.realized||0),(m.realizedCount||0)+' payments received'],
   ['Customers acquired',String(m.custA),m.custQ+' quoted'],['Total discount',fmtINR(m.disc),'over '+m.detN+' scanned'],['Avg discount %',m.avgDisc.toFixed(1)+'%','on '+m.discCount+' discounted quotes'],['AOV',fmtINR(m.aov),'per quotation']];
   const _sv=p=>'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
   const KPI=[
     {c:'#2563eb',i:_sv('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>')},
     {c:'#2563eb',i:'<span style="font-size:18px;font-weight:700;line-height:1">₹</span>'},
     {c:'#16a34a',i:_sv('<polyline points="20 6 9 17 4 12"/>')},
+    {c:'#059669',i:_sv('<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>')},
     {c:'#7c3aed',i:_sv('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/>')},
     {c:'#ea580c',i:_sv('<path d="M20 13.5 13.5 20a2 2 0 0 1-3 0L3 12.5V3h9.5L20 10.5a2 2 0 0 1 0 3z"/><circle cx="7.5" cy="7.5" r="1.5"/>')},
     {c:'#db2777',i:_sv('<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>')},
     {c:'#0d9488',i:_sv('<line x1="6" y1="20" x2="6" y2="14"/><line x1="12" y1="20" x2="12" y2="8"/><line x1="18" y1="20" x2="18" y2="4"/>')}
   ];
-  const METRICS=['count','quoted','accepted','customers','discount','avgdisc','aov'];
+  const METRICS=['count','quoted','accepted','realized','customers','discount','avgdisc','aov'];
   $('orgCards').innerHTML=c.map((x,i)=>{const k=KPI[i]||KPI[0];return '<div class="kpi" data-metric="'+METRICS[i]+'" title="Click to see the quotations behind this number"><div class="chip" style="background:'+k.c+'22;color:'+k.c+'">'+k.i+'</div><div class="l">'+esc(x[0])+'</div><div class="v">'+esc(x[1])+'</div><div class="s">'+esc(x[2])+'</div></div>';}).join('');
   $('orgCards').querySelectorAll('.kpi[data-metric]').forEach(el=>el.onclick=()=>openDrill(el.getAttribute('data-metric')));}
 // Drill-down: list the quotations that make up a Summary metric (respects current period/status/POC filters).
 function openDrill(metric,pocOverride){
   const f=activeFilter(),st=STATUSF;
+  if(metric==='realized'){
+    let plist=PAY.filter(v=>inFilter(String(v.date||'').slice(0,10),f)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    let psum=0;const prows=plist.map(v=>{const a=Number(v.amount)||0;psum+=a;
+      return '<tr><td style="text-align:left">'+esc(v.customer_name||'')+'</td><td style="text-align:left">'+esc(String(v.date||'').slice(0,10))+'</td><td style="text-align:left">'+esc(v.mode||'')+'</td><td style="text-align:left">'+esc(v.payment_number||v.invoice_number||'')+'</td><td>'+fmtINR(a)+'</td></tr>';}).join('');
+    const phead='<tr><th style="text-align:left">Customer</th><th style="text-align:left">Date</th><th style="text-align:left">Mode</th><th style="text-align:left">Ref</th><th>Amount received</th></tr>';
+    const pfoot='<tr style="font-weight:700;border-top:2px solid var(--line)"><td style="text-align:left" colspan="4">'+plist.length+' payment(s)</td><td>'+fmtINR(psum)+'</td></tr>';
+    $('drillTitle').textContent='Realized revenue · '+periodLabel();
+    $('drillBody').innerHTML=plist.length?('<div class="panel" style="overflow-x:auto"><table>'+phead+prows+pfoot+'</table></div><div class="note">Actual payments received in Zoho, by payment date.</div>'):'<div class="empty">No payments received in this period.</div>';
+    $('drillModal').style.display='flex';return;
+  }
   const pocOk=e=>pocOverride?sp(e)===pocOverride:pocPass(sp(e));
   const acc=(metric==='accepted'||metric==='customers');
   let list,title='All quotations',showDisc=false,showAcc=false;
@@ -1793,6 +1808,17 @@ async function loadInvoices(){
   }
   INV=all;
 }
+async function loadPayments(){
+  let all=[],page=1;
+  while(page<=15){
+    setStatus('Loading payments received… '+all.length);
+    const r=await call(ZOHO+'__list_payments',{query_params:{organization_id:ORG,per_page:200,page:page,sort_column:'date'}});
+    const arr=(r&&r.data&&r.data.payments)||(r&&r.payments)||[];all=all.concat(arr);
+    const pc=(r&&r.data&&r.data.page_context)||(r&&r.page_context)||{};
+    if(!arr.length||pc.has_more_page===false||arr.length<200)break;page++;
+  }
+  PAY=all;
+}
 function invPoc(v){return String(v.salesperson_name||'').trim()||String(v.created_by||'').trim()||'(Unassigned)';}
 function dueTable(){
   const f=activeFilter();
@@ -1836,6 +1862,7 @@ async function build(force){
     if(!SUM.length)await loadSummaries();
     buildPocChips();render();
     if(!INV.length||force)await loadInvoices();
+    if(!PAY.length||force)await loadPayments();render();
     await ensureDetails();render();
     setStatus('Updated '+new Date().toLocaleString());
   }catch(e){setStatus('⚠ '+e.message);}

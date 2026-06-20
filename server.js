@@ -154,6 +154,7 @@ async function zoho(op, args) {
   let path = "", method = "GET", contactShape = false, sendEstimate = false;
   switch (op) {
     case "list_items": path = "/items"; break;
+    case "list_payments": path = "/payments"; break;
     case "list_estimates": path = "/estimates"; break;
     case "get_estimate": path = "/estimates/" + pv.estimate_id; break;
     case "create_estimate": path = "/estimates"; method = "POST"; sendEstimate = String(qp.send) === "true"; break;
