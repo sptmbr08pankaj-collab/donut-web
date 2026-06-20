@@ -165,7 +165,7 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
 #view-dashboard .iconbtn{position:relative;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);display:grid;place-content:center;cursor:pointer}
 #view-dashboard .iconbtn:hover{color:var(--ink)}
 #view-dashboard .iconbtn .reddot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:#ef4444}
-#view-dashboard .kpi[data-metric]{cursor:pointer}
+#view-dashboard .kpi[data-metric]{cursor:pointer}#view-dashboard #pocTable tbody tr[data-poc]{cursor:pointer}#view-dashboard #pocTable tbody tr[data-poc]:hover td{background:rgba(59,130,246,.07)}#view-dashboard .rk-poc{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}#view-dashboard .rk-poc:hover{color:#2563eb}
 #view-dashboard .drill-ov{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
 #view-dashboard .drill-box{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:920px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
 #view-dashboard .drill-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
@@ -1696,9 +1696,9 @@ function orgCards(){const m=ORGM;const c=[['Quotations',String(m.count),''],['Qu
   $('orgCards').innerHTML=c.map((x,i)=>{const k=KPI[i]||KPI[0];return '<div class="kpi" data-metric="'+METRICS[i]+'" title="Click to see the quotations behind this number"><div class="chip" style="background:'+k.c+'22;color:'+k.c+'">'+k.i+'</div><div class="l">'+esc(x[0])+'</div><div class="v">'+esc(x[1])+'</div><div class="s">'+esc(x[2])+'</div></div>';}).join('');
   $('orgCards').querySelectorAll('.kpi[data-metric]').forEach(el=>el.onclick=()=>openDrill(el.getAttribute('data-metric')));}
 // Drill-down: list the quotations that make up a Summary metric (respects current period/status/POC filters).
-function openDrill(metric){
+function openDrill(metric,pocOverride){
   const f=activeFilter(),st=STATUSF;
-  let list=SUM.filter(e=>inFilter(e.date,f)&&statusPass(e.status,st)&&pocPass(sp(e)));
+  let list=SUM.filter(e=>inFilter(e.date,f)&&statusPass(e.status,st)&&(pocOverride?sp(e)===pocOverride:pocPass(sp(e))));
   let title='All quotations',showDisc=false;
   if(metric==='accepted'){list=list.filter(e=>isAcc(e.status));title='Accepted / invoiced quotations';}
   else if(metric==='customers'){list=list.filter(e=>isAcc(e.status));title='Customers acquired (accepted / invoiced)';}
@@ -1711,26 +1711,29 @@ function openDrill(metric){
     return '<tr><td style="text-align:left">'+esc(e.estimate_number||'')+'</td><td style="text-align:left">'+esc(String(e.date||'').slice(0,10))+'</td><td style="text-align:left">'+esc(e.customer_name||'')+'</td><td style="text-align:left">'+esc(sp(e))+'</td><td style="text-align:left">'+esc(e.status||'')+'</td>'+(showDisc?'<td>'+fmtINR(dv)+'</td>':'')+'<td>'+fmtINR(t)+'</td></tr>';}).join('');
   const head='<tr><th style="text-align:left">Quote #</th><th style="text-align:left">Date</th><th style="text-align:left">Customer</th><th style="text-align:left">POC</th><th style="text-align:left">Status</th>'+(showDisc?'<th>Discount</th>':'')+'<th>Total</th></tr>';
   const foot='<tr style="font-weight:700;border-top:2px solid var(--line)"><td style="text-align:left" colspan="'+(showDisc?6:5)+'">'+list.length+' quotation(s)</td>'+(showDisc?'<td>'+fmtINR(dsum)+'</td>':'')+'<td>'+fmtINR(sum)+'</td></tr>';
-  $('drillTitle').textContent=title+' · '+periodLabel();
+  $('drillTitle').textContent=(pocOverride?(pocOverride+' — '):'')+title+' · '+periodLabel();
   $('drillBody').innerHTML=list.length?('<div class="panel" style="overflow-x:auto"><table>'+head+rows+foot+'</table></div>'+(showDisc?'<div class="note">Discount figures come from scanned quotations for this period.</div>':'')):'<div class="empty">No quotations match this metric for the current filters.</div>';
   $('drillModal').style.display='flex';}
 function rankCards(){const medal='🥇';
   function top(arr,val,asc){return arr.slice().filter(p=>p.count>0).sort((a,b)=>asc?(val(a)-val(b)):(val(b)-val(a)));}
-  function card(title,arr,fmt){const w=arr[0];if(!w)return '<div class="rank"><div class="t">'+title+'</div><div class="w">—</div></div>';
-    return '<div class="rank"><div class="t">'+title+'</div><div class="w">'+medal+' '+esc(w.name)+' · '+fmt(w)+'</div><ol>'+arr.slice(1,4).map(p=>'<li>'+esc(p.name)+' · '+fmt(p)+'</li>').join('')+'</ol></div>';}
-  $('rankCards').innerHTML=card('Most customers acquired',top(POCS,p=>p.custA),p=>p.custA+' cust')+
-    card('Highest sales (accepted)',top(POCS,p=>p.accepted),p=>fmtINR(p.accepted))+
-    card('Highest AOV',top(POCS,p=>p.aov),p=>fmtINR(p.aov))+
-    card('Lowest avg discount',top(POCS.filter(p=>p.detN>0),p=>p.avgDisc,true),p=>p.avgDisc.toFixed(1)+'%');}
+  function nm(p,metric){return '<span class="rk-poc" data-poc="'+esc(p.name)+'" data-metric="'+metric+'">'+esc(p.name)+'</span>';}
+  function card(title,arr,fmt,metric){const w=arr[0];if(!w)return '<div class="rank"><div class="t">'+title+'</div><div class="w">—</div></div>';
+    return '<div class="rank"><div class="t">'+title+'</div><div class="w">'+medal+' '+nm(w,metric)+' · '+fmt(w)+'</div><ol>'+arr.slice(1,4).map(p=>'<li>'+nm(p,metric)+' · '+fmt(p)+'</li>').join('')+'</ol></div>';}
+  $('rankCards').innerHTML=card('Most customers acquired',top(POCS,p=>p.custA),p=>p.custA+' cust','customers')+
+    card('Highest sales (accepted)',top(POCS,p=>p.accepted),p=>fmtINR(p.accepted),'accepted')+
+    card('Highest AOV',top(POCS,p=>p.aov),p=>fmtINR(p.aov),'aov')+
+    card('Lowest avg discount',top(POCS.filter(p=>p.detN>0),p=>p.avgDisc,true),p=>p.avgDisc.toFixed(1)+'%','discount');
+  $('rankCards').querySelectorAll('.rk-poc').forEach(s=>s.onclick=()=>openDrill(s.getAttribute('data-metric'),s.getAttribute('data-poc')));}
 function pocTable(){
   const cols=[['name','POC'],['count','Quotes'],['quoted','Quoted ₹'],['accepted','Accepted ₹'],['aov','AOV ₹'],['custA','Customers'],['disc','Discount ₹'],['avgDisc','Avg disc %']];
   const rows=POCS.slice().sort((a,b)=>{const k=SORT.key,va=a[k],vb=b[k];if(typeof va==='string')return SORT.dir*va.localeCompare(vb);return SORT.dir*(va-vb);});
   const maxAcc=Math.max(1,...rows.map(r=>r.accepted));
   $('pocTable').querySelector('thead').innerHTML='<tr>'+cols.map(c=>'<th data-k="'+c[0]+'">'+c[1]+(SORT.key===c[0]?(SORT.dir<0?' ▾':' ▴'):'')+'</th>').join('')+'</tr>';
-  $('pocTable').querySelector('tbody').innerHTML=rows.map(function(r){var me=window.__DONUT_POC&&String(r.name||'').trim().toLowerCase()===String(window.__DONUT_POC).trim().toLowerCase();return '<tr'+(me?' style="background:#eaf2ff;font-weight:600"':'')+'><td>'+(me?'★ ':'')+esc(r.name)+'</td><td>'+r.count+'</td><td>'+fmtINR(r.quoted)+'</td>'+
+  $('pocTable').querySelector('tbody').innerHTML=rows.map(function(r){var me=window.__DONUT_POC&&String(r.name||'').trim().toLowerCase()===String(window.__DONUT_POC).trim().toLowerCase();return '<tr data-poc="'+esc(r.name)+'"'+(me?' style="background:#eaf2ff;font-weight:600"':'')+'><td>'+(me?'★ ':'')+esc(r.name)+'</td><td>'+r.count+'</td><td>'+fmtINR(r.quoted)+'</td>'+
     '<td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*r.accepted/maxAcc)+'px"></span><span>'+fmtINR(r.accepted)+'</span></div></td>'+
     '<td>'+fmtINR(r.aov)+'</td><td>'+r.custA+'</td><td>'+fmtINR(r.disc)+'</td><td>'+(r.discCount?r.avgDisc.toFixed(1)+'%':'—')+'</td></tr>';}).join('')||'<tr><td colspan="8" class="empty">No quotations in this period</td></tr>';
-  $('pocTable').querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(SORT.key===k)SORT.dir*=-1;else{SORT.key=k;SORT.dir=-1;}pocTable();});}
+  $('pocTable').querySelector('thead').querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(SORT.key===k)SORT.dir*=-1;else{SORT.key=k;SORT.dir=-1;}pocTable();});
+  $('pocTable').querySelectorAll('tbody tr[data-poc]').forEach(tr=>tr.onclick=()=>openDrill('count',tr.getAttribute('data-poc')));}
 function itemTable(elId,arr){
   if(!arr.length){$(elId).querySelector('thead').innerHTML='';$(elId).querySelector('tbody').innerHTML='<tr><td class="empty">No items in scanned window / period</td></tr>';return;}
   const sorted=arr.slice().sort((a,b)=>b.revenue-a.revenue);const max=Math.max(1,...sorted.map(r=>r.revenue));
