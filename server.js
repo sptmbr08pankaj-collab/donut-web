@@ -201,6 +201,34 @@ function mapAssoc(objectType, assocs) {
   return (assocs || []).map((a) => ({ to: { id: a.targetObjectId }, types: [{ associationCategory: "HUBSPOT_DEFINED", associationTypeId: typeId }] }));
 }
 async function hubspot(op, args, sessionUser) {
+  if (op === "list_objects") {
+    // Generic CRM v3 list (paginated) — used by the HubSpot performance dashboard for contacts/calls/deals.
+    const ot = args.objectType || "contacts";
+    const u = new URL(`https://api.hubapi.com/crm/v3/objects/${ot}`);
+    ["limit", "after", "archived"].forEach((k) => { if (args[k] != null) u.searchParams.set(k, String(args[k])); });
+    if (args.properties) u.searchParams.set("properties", Array.isArray(args.properties) ? args.properties.join(",") : String(args.properties));
+    if (args.associations) u.searchParams.set("associations", Array.isArray(args.associations) ? args.associations.join(",") : String(args.associations));
+    const r = await fetch(u, { headers: hsHeaders() });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d && d.message) || ("HubSpot " + r.status));
+    return d;
+  }
+  if (op === "search_objects") {
+    // CRM v3 search with full body (filterGroups, properties, sorts, after) — for the HubSpot dashboard.
+    const ot = args.objectType || "contacts";
+    const r = await fetch(`https://api.hubapi.com/crm/v3/objects/${ot}/search`, { method: "POST", headers: hsHeaders(), body: JSON.stringify(args.body || {}) });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d && d.message) || ("HubSpot " + r.status));
+    return d;
+  }
+  if (op === "assoc_batch") {
+    // Batch-read associations (e.g., calls -> contacts) to attribute calls to leads.
+    const from = args.fromType || "calls", to = args.toType || "contacts";
+    const r = await fetch(`https://api.hubapi.com/crm/v4/associations/${from}/${to}/batch/read`, { method: "POST", headers: hsHeaders(), body: JSON.stringify({ inputs: (args.ids || []).map((id) => ({ id: String(id) })) }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d && d.message) || ("HubSpot " + r.status));
+    return d;
+  }
   if (op === "get_user_details") {
     const parts = String((sessionUser && sessionUser.name) || "DigiStay Team").trim().split(/\s+/);
     return { userInformation: { email: (sessionUser && sessionUser.email) || ("team@" + ALLOWED_DOMAIN), firstName: parts.shift() || "DigiStay", lastName: parts.join(" "), ownerId: "" } };

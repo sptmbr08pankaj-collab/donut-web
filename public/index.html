@@ -196,7 +196,7 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
 </style>
 </head>
 <body>
-<div class="appnav"><span class="brandmark"><span style="font-size:19px">🍩</span> Donut</span><button class="navtab active" data-view="builder">🧾 Quote Builder</button><button class="navtab" data-view="dashboard">📊 Performance</button></div>
+<div class="appnav"><span class="brandmark"><span style="font-size:19px">🍩</span> Donut</span><button class="navtab active" data-view="builder">🧾 Quote Builder</button><button class="navtab" data-view="dashboard">📊 Performance</button><button class="navtab" data-view="hubspot">📞 HubSpot</button></div>
 <div id="view-builder">
 
 <div class="topbar">
@@ -2058,7 +2058,196 @@ init();
 
 </script>
 <script>
-(function(){function show(v){document.getElementById("view-builder").style.display=v==="builder"?"":"none";document.getElementById("view-dashboard").style.display=v==="dashboard"?"":"none";var t=document.querySelectorAll(".navtab");for(var i=0;i<t.length;i++)t[i].classList.toggle("active",t[i].dataset.view===v);if(v==="dashboard"&&window.__dashOnShow)window.__dashOnShow();window.scrollTo(0,0);}var t=document.querySelectorAll(".navtab");for(var i=0;i<t.length;i++)t[i].onclick=(function(b){return function(){show(b.dataset.view);};})(t[i]);})();
+(function(){function show(v){document.getElementById("view-builder").style.display=v==="builder"?"":"none";document.getElementById("view-dashboard").style.display=v==="dashboard"?"":"none";var hv=document.getElementById("view-hubspot");if(hv)hv.style.display=v==="hubspot"?"":"none";var t=document.querySelectorAll(".navtab");for(var i=0;i<t.length;i++)t[i].classList.toggle("active",t[i].dataset.view===v);if(v==="dashboard"&&window.__dashOnShow)window.__dashOnShow();if(v==="hubspot"&&window.__hubOnShow)window.__hubOnShow();window.scrollTo(0,0);}var t=document.querySelectorAll(".navtab");for(var i=0;i<t.length;i++)t[i].onclick=(function(b){return function(){show(b.dataset.view);};})(t[i]);})();
+</script>
+<div id="view-hubspot" style="display:none">
+<style>
+#view-hubspot .hubwrap{max-width:1280px;margin:0 auto;padding:18px 22px}
+#view-hubspot .hubhead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+#view-hubspot .hubtitle{font-size:16px;font-weight:750;color:var(--brand)}
+#view-hubspot .hubsub{font-size:12px;color:var(--muted);margin-top:2px}
+#view-hubspot .hubbtn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 12px;cursor:pointer;font:inherit}
+#view-hubspot .hubtabs{display:flex;gap:8px;margin-bottom:12px}
+#view-hubspot .hubtab{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 16px;font-weight:650;color:var(--muted);cursor:pointer}
+#view-hubspot .hubtab.on{background:var(--brand);border-color:var(--brand);color:#fff}
+#view-hubspot .hubfrow{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:12px}
+#view-hubspot .hubf{display:inline-flex;flex-direction:column;gap:3px}
+#view-hubspot .hubf .l{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+#view-hubspot select,#view-hubspot input[type=date]{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 9px;min-width:150px}
+#view-hubspot .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+#view-hubspot .seg button{border:0;background:var(--card);color:var(--muted);padding:7px 12px;cursor:pointer;font:inherit}
+#view-hubspot .seg button.on{background:var(--brand);color:#fff}
+#view-hubspot .agdd{position:relative}
+#view-hubspot .agdd>button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 10px;min-width:160px;text-align:left;cursor:pointer;font-weight:600}
+#view-hubspot .agmenu{position:absolute;z-index:60;top:calc(100% + 4px);left:0;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.15);padding:8px;min-width:230px;max-height:300px;overflow:auto}
+#view-hubspot .agmenu label{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;font-size:13px;cursor:pointer}
+#view-hubspot .agmenu label:hover{background:rgba(128,128,128,.1)}
+#view-hubspot .hubcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+#view-hubspot .hk{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+#view-hubspot .hk .l{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+#view-hubspot .hk .v{font-size:23px;font-weight:750;margin-top:5px}
+#view-hubspot .hk .s{font-size:11px;color:var(--muted);margin-top:3px}
+#view-hubspot .hubgrid{display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:16px}
+@media(min-width:880px){#view-hubspot .hubgrid{grid-template-columns:1fr 1fr}}
+#view-hubspot .hubpanel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+#view-hubspot .hubph{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:10px}
+#view-hubspot .hubph2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:18px 0 10px;font-weight:700}
+#view-hubspot table{width:100%;border-collapse:collapse;font-size:13px}
+#view-hubspot th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:right;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer}
+#view-hubspot th:first-child,#view-hubspot td:first-child{text-align:left}
+#view-hubspot td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+#view-hubspot .brow{display:flex;align-items:center;justify-content:space-between;padding:6px 0;font-size:13px}
+#view-hubspot .bbar{height:8px;border-radius:4px;background:var(--brand);display:inline-block;vertical-align:middle;margin-right:8px}
+#view-hubspot .hubhint{font-size:12px;color:var(--muted)}
+#view-hubspot .hsec{display:none}#view-hubspot .hsec.on{display:block}
+</style>
+<div class="hubwrap">
+  <div class="hubhead">
+    <div><div class="hubtitle">📞 HubSpot · Sales Performance</div><div class="hubsub">Leads &amp; call activity from HubSpot</div></div>
+    <button id="hubRefresh" class="hubbtn">↻ Refresh</button>
+  </div>
+  <div class="hubtabs"><button class="hubtab on" data-hsec="contacts">Contacts</button><button class="hubtab" data-hsec="deals">Deals</button></div>
+  <div class="hubfrow">
+    <span class="hubf"><span class="l">Period</span>
+      <select id="hubPeriod"><option value="mtd">This month</option><option value="lastmonth">Last month</option><option value="3m" selected>Last 3 months</option><option value="all">All time</option><option value="custom">Custom dates</option></select></span>
+    <span class="hubf"><span class="l">From</span><input type="date" id="hubFrom"></span>
+    <span class="hubf"><span class="l">To</span><input type="date" id="hubTo"></span>
+    <span class="hubf"><span class="l">Agent</span>
+      <span class="agdd"><button id="hubAgBtn" type="button">All agents ▾</button>
+        <div id="hubAgMenu" class="agmenu" style="display:none"><div id="hubAgList"></div></div></span></span>
+    <span class="hubf"><span class="l">Trend by</span>
+      <span class="seg" id="hubGran"><button data-g="day">Day</button><button data-g="month" class="on">Month</button></span></span>
+  </div>
+  <div id="hubStatus" class="hubhint" style="margin-bottom:10px">Loading…</div>
+  <section class="hsec on" id="hsec-contacts">
+    <div class="hubcards" id="hubKpis"></div>
+    <div class="hubgrid">
+      <div class="hubpanel"><div class="hubph">Call outcomes</div><div id="hubOutcomes"></div></div>
+      <div class="hubpanel"><div class="hubph">Lead status (assigned in period)</div><div id="hubStatuses"></div></div>
+    </div>
+    <div class="hubph2">Trend — leads assigned vs contacted <span id="hubTrendScope" class="hubhint"></span></div>
+    <div class="hubpanel"><div class="chartbox" style="height:280px;position:relative"><canvas id="hubTrendChart"></canvas></div></div>
+    <div class="hubph2">By agent</div>
+    <div class="hubpanel" style="overflow-x:auto"><table id="hubAgentTable"><thead></thead><tbody></tbody></table></div>
+    <div class="hubhint" id="hubNote" style="margin-top:8px"></div>
+  </section>
+  <section class="hsec" id="hsec-deals">
+    <div class="hubpanel"><div class="hubph">Deals — not yet enabled</div>
+      <p class="hubhint">Add the <b>crm.objects.deals.read</b> scope to the HubSpot private app (Settings → Integrations → Private Apps → Scopes), then this section will track deals created, Sales→AM pipeline movement and lead→deal TAT.</p></div>
+  </section>
+</div>
+</div>
+<script>
+(function(){
+const HS='mcp__ebbfa203-0d0b-44fa-aae0-a87358d0fb66';
+const DISP={'9d9162e7-6cf3-4944-bf63-4dff82258764':'Busy','4b0b7e61-3f7f-4101-a1c1-c891b5f78de6':'Call Back Later','f240bbac-87c9-4f6e-bf70-924b57d47db7':'Connected','a4c4c377-d246-4b32-a13b-75a56a4cd0ff':'Left live message','b2cf5968-551e-4856-9783-52b3da59a7d0':'Left voicemail','73a0d17f-1163-4015-bdd5-ec830791da20':'No answer','f7e9fc74-df3f-445d-843c-d2556eedcfc4':'Switched OFF','17b47fee-58de-441e-a44c-c6300d46f273':'Wrong number'};
+const CONNECTED='f240bbac-87c9-4f6e-bf70-924b57d47db7';
+const $=function(id){return document.getElementById(id);};
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const PAGECAP=40,LIMIT=200;
+let OWN={},AGSEL=new Set(),HCON=[],HCALL=[],GRAN='month',HSTART=false,hubChart=null;
+function fmt(n){return new Intl.NumberFormat('en-IN').format(Math.round(Number(n)||0));}
+async function hc(op,args){const r=await window.cowork.callMcpTool(HS+'__'+op,args||{});if(r&&r.isError)throw new Error((r.content&&r.content[0]&&r.content[0].text)||'HubSpot error');return (r&&r.structuredContent)||r;}
+function setStatus(m){if($('hubStatus'))$('hubStatus').textContent=m||'';}
+function range(){const now=new Date(),y=now.getFullYear(),m=now.getMonth();const ms=d=>d.getTime();const p=$('hubPeriod').value;
+  if(p==='custom'){const f=$('hubFrom').value,t=$('hubTo').value;return {from:f?ms(new Date(f+'T00:00:00')):null,to:t?ms(new Date(t+'T23:59:59')):null};}
+  if(p==='mtd')return {from:ms(new Date(y,m,1)),to:ms(new Date(y,m+1,0,23,59,59))};
+  if(p==='lastmonth')return {from:ms(new Date(y,m-1,1)),to:ms(new Date(y,m,0,23,59,59))};
+  if(p==='3m')return {from:ms(new Date(y,m-2,1)),to:ms(new Date(y,m+1,0,23,59,59))};
+  return {from:null,to:null};}
+function dateFilter(prop,r){const f=[];if(r.from!=null)f.push({propertyName:prop,operator:'GTE',value:String(r.from)});if(r.to!=null)f.push({propertyName:prop,operator:'LTE',value:String(r.to)});return f;}
+async function fetchAll(objectType,dateProp,extraFilters,props){
+  const r=range();let after,out=[],pages=0;
+  do{const body={limit:LIMIT,properties:props,sorts:[{propertyName:dateProp,direction:'DESCENDING'}],filterGroups:[{filters:dateFilter(dateProp,r).concat(extraFilters||[])}]};
+    if(after)body.after=after;
+    const d=await hc('search_objects',{objectType:objectType,body:body});
+    (d.results||[]).forEach(x=>out.push(x));
+    after=d.paging&&d.paging.next&&d.paging.next.after;pages++;
+    setStatus('Loading '+objectType+'… '+out.length);
+  }while(after&&pages<PAGECAP);
+  return {rows:out,capped:!!after};
+}
+async function attachContacts(calls){
+  // batch-read call -> contact so we can count distinct contacted leads
+  const ids=calls.map(c=>c.id);
+  for(let i=0;i<ids.length;i+=100){
+    try{const d=await hc('assoc_batch',{fromType:'calls',toType:'contacts',ids:ids.slice(i,i+100)});
+      const map={};(d.results||[]).forEach(x=>{const fid=x.from&&x.from.id;const to=(x.to&&x.to[0]&&x.to[0].toObjectId)||(x.to&&x.to[0]&&x.to[0].id);if(fid)map[fid]=to;});
+      calls.slice(i,i+100).forEach(c=>{c._cid=map[c.id];});
+    }catch(e){}
+    setStatus('Linking calls to leads… '+Math.min(i+100,ids.length)+'/'+ids.length);
+  }
+}
+async function load(){
+  $('hubRefresh').disabled=true;
+  try{
+    if(!Object.keys(OWN).length){const o=await hc('search_owners',{});(o.owners||[]).forEach(w=>{OWN[String(w.ownerId)]=w.name||w.email||('Owner '+w.ownerId);});buildAgents();}
+    const c=await fetchAll('contacts','createdate',[],['createdate','hubspot_owner_id','hs_lead_status']);
+    HCON=c.rows.map(x=>({id:x.id,t:Date.parse(x.properties.createdate)||0,own:String(x.properties.hubspot_owner_id||''),st:x.properties.hs_lead_status||''}));
+    const k=await fetchAll('calls','hs_timestamp',[{propertyName:'hs_call_direction',operator:'EQ',value:'OUTBOUND'}],['hs_timestamp','hs_call_disposition','hs_call_direction','hubspot_owner_id']);
+    HCALL=k.rows.map(x=>({id:x.id,t:Date.parse(x.properties.hs_timestamp)||0,own:String(x.properties.hubspot_owner_id||''),disp:x.properties.hs_call_disposition||''}));
+    await attachContacts(HCALL);
+    setStatus('Updated '+new Date().toLocaleString()+(c.capped||k.capped?(' · note: results capped at '+(PAGECAP*LIMIT)+' records — narrow the period for full accuracy'):''));
+    render();
+  }catch(e){setStatus('⚠ '+e.message);}
+  $('hubRefresh').disabled=false;
+}
+function agPass(own){return AGSEL.size===0||AGSEL.has(own);}
+function ownerName(id){return OWN[id]||(id?('Owner '+id):'(Unassigned)');}
+function bucketKey(t){const d=new Date(t);return GRAN==='day'?(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')):(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));}
+function render(){
+  const con=HCON.filter(c=>agPass(c.own)),cal=HCALL.filter(c=>agPass(c.own));
+  const assigned=con.length;
+  const contactedSet={};cal.forEach(c=>{if(c._cid)contactedSet[c._cid]=1;});
+  const contacted=Object.keys(contactedSet).length;
+  const attempts=cal.length;
+  const connected=cal.filter(c=>c.disp===CONNECTED).length;
+  const rate=assigned?Math.round(100*contacted/assigned):0;
+  const kpis=[['Leads assigned',fmt(assigned),'created in period'],['Leads contacted',fmt(contacted),'≥1 call logged'],['Contact rate',rate+'%','contacted ÷ assigned'],['Total attempts',fmt(attempts),'outbound calls'],['Avg attempts / contacted',contacted?(attempts/contacted).toFixed(1):'0','calls per lead'],['Connected',fmt(connected),'reached']];
+  $('hubKpis').innerHTML=kpis.map(x=>'<div class="hk"><div class="l">'+x[0]+'</div><div class="v">'+x[1]+'</div><div class="s">'+x[2]+'</div></div>').join('');
+  // outcomes
+  const oc={};cal.forEach(c=>{const k=DISP[c.disp]||'(none)';oc[k]=(oc[k]||0)+1;});
+  const ocArr=Object.keys(oc).map(k=>[k,oc[k]]).sort((a,b)=>b[1]-a[1]);const ocMax=Math.max(1,...ocArr.map(x=>x[1]));
+  $('hubOutcomes').innerHTML=ocArr.map(x=>'<div class="brow"><span>'+x[0]+'</span><span><span class="bbar" style="width:'+Math.round(90*x[1]/ocMax)+'px"></span><b>'+fmt(x[1])+'</b></span></div>').join('')||'<div class="hubhint">No calls in period.</div>';
+  // lead status
+  const ls={};con.forEach(c=>{const k=c.st||'(none)';ls[k]=(ls[k]||0)+1;});
+  const lsArr=Object.keys(ls).map(k=>[k,ls[k]]).sort((a,b)=>b[1]-a[1]);const lsMax=Math.max(1,...lsArr.map(x=>x[1]));
+  $('hubStatuses').innerHTML=lsArr.map(x=>'<div class="brow"><span>'+x[0]+'</span><span><span class="bbar" style="width:'+Math.round(90*x[1]/lsMax)+'px;background:var(--accent)"></span><b>'+fmt(x[1])+'</b></span></div>').join('')||'<div class="hubhint">No leads in period.</div>';
+  // by agent
+  const A={};function ag(o){return A[o]||(A[o]={own:o,assigned:0,attempts:0,connected:0,cset:{}});}
+  con.forEach(c=>{ag(c.own).assigned++;});
+  cal.forEach(c=>{const a=ag(c.own);a.attempts++;if(c.disp===CONNECTED)a.connected++;if(c._cid)a.cset[c._cid]=1;});
+  const arows=Object.values(A).map(a=>({name:ownerName(a.own),assigned:a.assigned,contacted:Object.keys(a.cset).length,attempts:a.attempts,connected:a.connected,rate:a.assigned?Math.round(100*Object.keys(a.cset).length/a.assigned):0})).sort((a,b)=>b.attempts-a.attempts);
+  $('hubAgentTable').querySelector('thead').innerHTML='<tr><th>Agent</th><th>Assigned</th><th>Contacted</th><th>Attempts</th><th>Connected</th><th>Contact %</th></tr>';
+  $('hubAgentTable').querySelector('tbody').innerHTML=arows.map(r=>'<tr><td>'+r.name+'</td><td>'+fmt(r.assigned)+'</td><td>'+fmt(r.contacted)+'</td><td>'+fmt(r.attempts)+'</td><td>'+fmt(r.connected)+'</td><td>'+r.rate+'%</td></tr>').join('')||'<tr><td colspan="6" class="hubhint" style="padding:16px">No data for this selection.</td></tr>';
+  // trend
+  const buckets={};con.forEach(c=>{const k=bucketKey(c.t);(buckets[k]||(buckets[k]={a:0,cset:{}})).a++;});
+  cal.forEach(c=>{if(!c._cid)return;const k=bucketKey(c.t);(buckets[k]||(buckets[k]={a:0,cset:{}})).cset[c._cid]=1;});
+  const keys=Object.keys(buckets).sort().slice(GRAN==='day'?-60:-24);
+  const labels=keys.map(k=>{const p=k.split('-');return GRAN==='day'?(p[2]+' '+MONTHS[+p[1]-1]):(MONTHS[+p[1]-1]+" '"+p[0].slice(2));});
+  const aData=keys.map(k=>buckets[k].a),cData=keys.map(k=>Object.keys(buckets[k].cset).length);
+  $('hubTrendScope').textContent='· '+keys.length+' '+(GRAN==='day'?'days':'months');
+  if(typeof Chart!=='undefined'){if(hubChart){try{hubChart.destroy();}catch(e){}}
+    hubChart=new Chart($('hubTrendChart'),{type:'bar',data:{labels:labels,datasets:[{label:'Assigned',data:aData,backgroundColor:'#3b82f6',borderRadius:4},{label:'Contacted',data:cData,backgroundColor:'#0d9488',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:12,font:{size:11}}}},scales:{y:{beginAtZero:true,ticks:{font:{size:11}}},x:{ticks:{font:{size:10}}}}}});}
+  $('hubNote').textContent='Leads assigned = contacts created in the selected period (by their owner). Contacted = distinct leads with ≥1 outbound call logged. Attempts = outbound calls. Calls are attributed to the agent who made them.';
+}
+function buildAgents(){const box=$('hubAgList');if(!box)return;const ids=Object.keys(OWN).sort((a,b)=>OWN[a].localeCompare(OWN[b]));
+  box.innerHTML=ids.map(id=>'<label><input type="checkbox" value="'+id+'"'+(AGSEL.has(id)?' checked':'')+'> '+OWN[id]+'</label>').join('');
+  box.querySelectorAll('input').forEach(c=>c.onchange=function(){if(c.checked)AGSEL.add(c.value);else AGSEL.delete(c.value);$('hubAgBtn').textContent=(AGSEL.size?AGSEL.size+' agent(s)':'All agents')+' ▾';render();});}
+function init(){
+  if(!window.cowork||!window.cowork.callMcpTool)return;
+  $('hubRefresh').onclick=load;
+  $('hubPeriod').addEventListener('change',load);
+  $('hubFrom').addEventListener('change',function(){if($('hubFrom').value||$('hubTo').value)$('hubPeriod').value='custom';load();});
+  $('hubTo').addEventListener('change',function(){if($('hubFrom').value||$('hubTo').value)$('hubPeriod').value='custom';load();});
+  $('hubAgBtn').onclick=function(e){e.stopPropagation();var m=$('hubAgMenu');m.style.display=m.style.display==='none'?'':'none';};
+  document.addEventListener('click',function(e){var m=$('hubAgMenu');if(m&&m.style.display!=='none'&&!(e.target.closest&&e.target.closest('.agdd')))m.style.display='none';});
+  $('hubGran').querySelectorAll('button').forEach(b=>b.onclick=function(){GRAN=b.getAttribute('data-g');$('hubGran').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');render();});
+  document.querySelectorAll('#view-hubspot .hubtab').forEach(b=>b.onclick=function(){document.querySelectorAll('#view-hubspot .hubtab').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.querySelectorAll('#view-hubspot .hsec').forEach(s=>s.classList.toggle('on',s.id==='hsec-'+b.getAttribute('data-hsec')));});
+  window.__hubOnShow=function(){if(HSTART){return;}HSTART=true;load();};
+}
+init();
+})();
 </script>
 </body>
 </html>
