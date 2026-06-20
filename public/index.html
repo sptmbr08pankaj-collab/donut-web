@@ -1583,7 +1583,25 @@ function custPocMap(){
   const m={};arr.forEach(e=>{const cid=e.customer_id;if(cid&&!(cid in m))m[cid]=sp(e);});
   CUSTPOC=m;return m;
 }
-function payPoc(v){return (v&&v.customer_id&&custPocMap()[v.customer_id])||'(Unassigned)';}
+// Invoices carry the salesperson from the originating quote, so a payment can be tied to the exact POC
+// via its invoice — even when the same customer has invoices under different POCs in the same month.
+let INVPOC=null,INVCA=null;
+function buildInvMaps(){
+  if(INVPOC&&INVCA)return;
+  INVPOC={};INVCA={};
+  INV.forEach(v=>{const s=String(v.salesperson_name||'').trim();if(!s)return;const poc=canonPoc(s);
+    const num=String(v.invoice_number||v.number||'').trim();if(num)INVPOC[num]=poc;
+    const cid=v.customer_id,amt=Math.round(Number(v.total)||0);if(cid&&amt)INVCA[cid+'|'+amt]=poc;});
+}
+// Attribute a payment to a POC: (1) its invoice's salesperson, (2) a same-customer invoice of the same
+// amount, else (3) the customer's quotation owner.
+function payPoc(v){
+  if(!v)return '(Unassigned)';
+  buildInvMaps();
+  const num=String(v.invoice_number||'').trim();if(num&&INVPOC[num])return INVPOC[num];
+  const cid=v.customer_id,amt=Math.round(Number(v.amount)||0);if(cid&&INVCA[cid+'|'+amt])return INVCA[cid+'|'+amt];
+  return (cid&&custPocMap()[cid])||'(Unassigned)';
+}
 
 async function loadSummaries(){
   setStatus('Loading quotations…');let all=[],page=1;
@@ -1818,7 +1836,7 @@ async function loadInvoices(){
     const pc=(r&&r.data&&r.data.page_context)||(r&&r.page_context)||{};
     if(!arr.length||pc.has_more_page===false||arr.length<200)break;page++;
   }
-  INV=all;
+  INV=all;INVPOC=null;INVCA=null;
 }
 async function loadPayments(){
   let all=[],page=1;
