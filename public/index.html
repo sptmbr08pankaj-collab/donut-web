@@ -2142,6 +2142,12 @@ init();
 const HS='mcp__ebbfa203-0d0b-44fa-aae0-a87358d0fb66';
 const DISP={'9d9162e7-6cf3-4944-bf63-4dff82258764':'Busy','4b0b7e61-3f7f-4101-a1c1-c891b5f78de6':'Call Back Later','f240bbac-87c9-4f6e-bf70-924b57d47db7':'Connected','a4c4c377-d246-4b32-a13b-75a56a4cd0ff':'Left live message','b2cf5968-551e-4856-9783-52b3da59a7d0':'Left voicemail','73a0d17f-1163-4015-bdd5-ec830791da20':'No answer','f7e9fc74-df3f-445d-843c-d2556eedcfc4':'Switched OFF','17b47fee-58de-441e-a44c-c6300d46f273':'Wrong number'};
 const CONNECTED='f240bbac-87c9-4f6e-bf70-924b57d47db7';
+// Sales team POCs — this dashboard is restricted to these people (both data and access).
+const SALES=['Abhinav Gupta','Ajitesh Kashyap','Shreya Jindal','Pankaj Chamoli'];
+const SALES_LC=SALES.map(s=>s.toLowerCase());
+let SALES_IDS=[];
+function authName(){return (window.__DONUT_POC||localStorage.getItem('digistay_lastpoc')||'').trim().toLowerCase();}
+function authorized(){return SALES_LC.indexOf(authName())>=0;}
 const $=function(id){return document.getElementById(id);};
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PAGECAP=40,LIMIT=200;
@@ -2149,16 +2155,29 @@ let OWN={},AGSEL=new Set(),HCON=[],HCALL=[],GRAN='month',HSTART=false,hubChart=n
 function fmt(n){return new Intl.NumberFormat('en-IN').format(Math.round(Number(n)||0));}
 async function hc(op,args){const r=await window.cowork.callMcpTool(HS+'__'+op,args||{});if(r&&r.isError)throw new Error((r.content&&r.content[0]&&r.content[0].text)||'HubSpot error');return (r&&r.structuredContent)||r;}
 function setStatus(m){if($('hubStatus'))$('hubStatus').textContent=m||'';}
+function sod(d){d=new Date(d);d.setHours(0,0,0,0);return d;}
+function eod(d){d=new Date(d);d.setHours(23,59,59,999);return d;}
+function weekStart(d){d=sod(d);const off=(d.getDay()+6)%7;d.setDate(d.getDate()-off);return d;}
 function range(){const now=new Date(),y=now.getFullYear(),m=now.getMonth();const ms=d=>d.getTime();const p=$('hubPeriod').value;
   if(p==='custom'){const f=$('hubFrom').value,t=$('hubTo').value;return {from:f?ms(new Date(f+'T00:00:00')):null,to:t?ms(new Date(t+'T23:59:59')):null};}
+  if(p==='today')return {from:ms(sod(now)),to:ms(eod(now))};
+  if(p==='yesterday'){const yd=new Date(now);yd.setDate(yd.getDate()-1);return {from:ms(sod(yd)),to:ms(eod(yd))};}
+  if(p==='thisweek')return {from:ms(weekStart(now)),to:ms(eod(now))};
+  if(p==='lastweek'){const s=weekStart(now);const ls=new Date(s);ls.setDate(ls.getDate()-7);const le=new Date(s);le.setDate(le.getDate()-1);return {from:ms(ls),to:ms(eod(le))};}
   if(p==='mtd')return {from:ms(new Date(y,m,1)),to:ms(new Date(y,m+1,0,23,59,59))};
   if(p==='lastmonth')return {from:ms(new Date(y,m-1,1)),to:ms(new Date(y,m,0,23,59,59))};
   if(p==='3m')return {from:ms(new Date(y,m-2,1)),to:ms(new Date(y,m+1,0,23,59,59))};
   return {from:null,to:null};}
+function setPeriodOptions(gran){const sel=$('hubPeriod');if(!sel)return;
+  const opts=gran==='day'?[['today','Today'],['yesterday','Yesterday'],['thisweek','This week'],['lastweek','Last week'],['custom','Custom dates']]
+    :[['mtd','This month'],['lastmonth','Last month'],['3m','Last 3 months'],['all','All time'],['custom','Custom dates']];
+  sel.innerHTML=opts.map(o=>'<option value="'+o[0]+'">'+o[1]+'</option>').join('');
+  sel.value=gran==='day'?'thisweek':'mtd';}
 function dateFilter(prop,r){const f=[];if(r.from!=null)f.push({propertyName:prop,operator:'GTE',value:String(r.from)});if(r.to!=null)f.push({propertyName:prop,operator:'LTE',value:String(r.to)});return f;}
 async function fetchAll(objectType,dateProp,extraFilters,props){
   const r=range();let after,out=[],pages=0;
-  do{const body={limit:LIMIT,properties:props,sorts:[{propertyName:dateProp,direction:'DESCENDING'}],filterGroups:[{filters:dateFilter(dateProp,r).concat(extraFilters||[])}]};
+  const ownerF=SALES_IDS.length?[{propertyName:'hubspot_owner_id',operator:'IN',values:SALES_IDS}]:[];
+  do{const body={limit:LIMIT,properties:props,sorts:[{propertyName:dateProp,direction:'DESCENDING'}],filterGroups:[{filters:dateFilter(dateProp,r).concat(extraFilters||[]).concat(ownerF)}]};
     if(after)body.after=after;
     const d=await hc('search_objects',{objectType:objectType,body:body});
     (d.results||[]).forEach(x=>out.push(x));
@@ -2181,7 +2200,7 @@ async function attachContacts(calls){
 async function load(){
   $('hubRefresh').disabled=true;
   try{
-    if(!Object.keys(OWN).length){const o=await hc('search_owners',{});(o.owners||[]).forEach(w=>{OWN[String(w.ownerId)]=w.name||w.email||('Owner '+w.ownerId);});buildAgents();}
+    if(!Object.keys(OWN).length){const o=await hc('search_owners',{});(o.owners||[]).forEach(w=>{const nm=w.name||w.email||('Owner '+w.ownerId);if(SALES_LC.indexOf(String(nm).trim().toLowerCase())>=0)OWN[String(w.ownerId)]=nm;});SALES_IDS=Object.keys(OWN);buildAgents();}
     const c=await fetchAll('contacts','createdate',[],['createdate','hubspot_owner_id','hs_lead_status']);
     HCON=c.rows.map(x=>({id:x.id,t:Date.parse(x.properties.createdate)||0,own:String(x.properties.hubspot_owner_id||''),st:x.properties.hs_lead_status||''}));
     const k=await fetchAll('calls','hs_timestamp',[{propertyName:'hs_call_direction',operator:'EQ',value:'OUTBOUND'}],['hs_timestamp','hs_call_disposition','hs_call_direction','hubspot_owner_id']);
@@ -2242,10 +2261,20 @@ function init(){
   $('hubTo').addEventListener('change',function(){if($('hubFrom').value||$('hubTo').value)$('hubPeriod').value='custom';load();});
   $('hubAgBtn').onclick=function(e){e.stopPropagation();var m=$('hubAgMenu');m.style.display=m.style.display==='none'?'':'none';};
   document.addEventListener('click',function(e){var m=$('hubAgMenu');if(m&&m.style.display!=='none'&&!(e.target.closest&&e.target.closest('.agdd')))m.style.display='none';});
-  $('hubGran').querySelectorAll('button').forEach(b=>b.onclick=function(){GRAN=b.getAttribute('data-g');$('hubGran').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');render();});
+  // Trend granularity drives the period options: Day -> today/yesterday/this week/last week; Month -> month ranges.
+  $('hubGran').querySelectorAll('button').forEach(b=>b.onclick=function(){GRAN=b.getAttribute('data-g');$('hubGran').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');setPeriodOptions(GRAN);load();});
   document.querySelectorAll('#view-hubspot .hubtab').forEach(b=>b.onclick=function(){document.querySelectorAll('#view-hubspot .hubtab').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.querySelectorAll('#view-hubspot .hsec').forEach(s=>s.classList.toggle('on',s.id==='hsec-'+b.getAttribute('data-hsec')));});
-  window.__hubOnShow=function(){if(HSTART){return;}HSTART=true;load();};
+  setPeriodOptions(GRAN);
+  applyAccess();setTimeout(applyAccess,1800);setTimeout(applyAccess,4000);
+  window.__hubOnShow=function(){
+    var ok=applyAccess();
+    var els=document.querySelectorAll('#view-hubspot .hubtabs,#view-hubspot .hubfrow,#view-hubspot .hsec');
+    if(!ok){$('hubStatus').textContent='Access restricted — the HubSpot performance dashboard is for the Sales team only ('+SALES.join(', ')+').';els.forEach(function(e){e.style.display='none';});return;}
+    els.forEach(function(e){e.style.display='';});
+    if(HSTART)return;HSTART=true;load();
+  };
 }
+function applyAccess(){var ok=authorized();var tab=document.querySelector('.navtab[data-view="hubspot"]');if(tab)tab.style.display=ok?'':'none';return ok;}
 init();
 })();
 </script>
