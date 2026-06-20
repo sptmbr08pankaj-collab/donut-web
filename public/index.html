@@ -165,6 +165,12 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
 #view-dashboard .iconbtn{position:relative;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);display:grid;place-content:center;cursor:pointer}
 #view-dashboard .iconbtn:hover{color:var(--ink)}
 #view-dashboard .iconbtn .reddot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:#ef4444}
+#view-dashboard .kpi[data-metric]{cursor:pointer}
+#view-dashboard .drill-ov{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+#view-dashboard .drill-box{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:920px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
+#view-dashboard .drill-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+#view-dashboard .drill-head h3{font-size:15px;font-weight:700;color:var(--ink);margin:0}
+#view-dashboard .drill-body{padding:14px 18px 18px;overflow:auto}
 #view-dashboard .kpi{border-radius:14px;transition:box-shadow .2s}
 #view-dashboard .kpi:hover{box-shadow:0 6px 20px rgba(15,23,42,.08)}
 #view-dashboard .kpi .chip{width:38px;height:38px;border-radius:10px;display:grid;place-content:center;margin-bottom:12px}
@@ -449,6 +455,12 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
   <div class="panel"><table id="aovTable"><thead></thead><tbody></tbody></table></div>
 
   <div class="note" id="caveat"></div>
+  </div>
+  <div id="drillModal" class="drill-ov" style="display:none">
+    <div class="drill-box">
+      <div class="drill-head"><h3 id="drillTitle"></h3><button id="drillClose" class="iconbtn" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+      <div id="drillBody" class="drill-body"></div>
+    </div>
   </div>
 </div>
 
@@ -1680,7 +1692,28 @@ function orgCards(){const m=ORGM;const c=[['Quotations',String(m.count),''],['Qu
     {c:'#db2777',i:_sv('<line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>')},
     {c:'#0d9488',i:_sv('<line x1="6" y1="20" x2="6" y2="14"/><line x1="12" y1="20" x2="12" y2="8"/><line x1="18" y1="20" x2="18" y2="4"/>')}
   ];
-  $('orgCards').innerHTML=c.map((x,i)=>{const k=KPI[i]||KPI[0];return '<div class="kpi"><div class="chip" style="background:'+k.c+'22;color:'+k.c+'">'+k.i+'</div><div class="l">'+esc(x[0])+'</div><div class="v">'+esc(x[1])+'</div><div class="s">'+esc(x[2])+'</div></div>';}).join('');}
+  const METRICS=['count','quoted','accepted','customers','discount','avgdisc','aov'];
+  $('orgCards').innerHTML=c.map((x,i)=>{const k=KPI[i]||KPI[0];return '<div class="kpi" data-metric="'+METRICS[i]+'" title="Click to see the quotations behind this number"><div class="chip" style="background:'+k.c+'22;color:'+k.c+'">'+k.i+'</div><div class="l">'+esc(x[0])+'</div><div class="v">'+esc(x[1])+'</div><div class="s">'+esc(x[2])+'</div></div>';}).join('');
+  $('orgCards').querySelectorAll('.kpi[data-metric]').forEach(el=>el.onclick=()=>openDrill(el.getAttribute('data-metric')));}
+// Drill-down: list the quotations that make up a Summary metric (respects current period/status/POC filters).
+function openDrill(metric){
+  const f=activeFilter(),st=STATUSF;
+  let list=SUM.filter(e=>inFilter(e.date,f)&&statusPass(e.status,st)&&pocPass(sp(e)));
+  let title='All quotations',showDisc=false;
+  if(metric==='accepted'){list=list.filter(e=>isAcc(e.status));title='Accepted / invoiced quotations';}
+  else if(metric==='customers'){list=list.filter(e=>isAcc(e.status));title='Customers acquired (accepted / invoiced)';}
+  else if(metric==='discount'||metric==='avgdisc'){showDisc=true;list=list.filter(e=>{const d=DETMAP[e.estimate_id];return d&&Number(d.discount_total)>0;});title='Discounted quotations';}
+  else if(metric==='quoted'){title='All quotations — quoted value';}
+  else if(metric==='aov'){title='All quotations (AOV basis)';}
+  list.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+  let sum=0,dsum=0;
+  const rows=list.map(e=>{const t=Number(e.total)||0;sum+=t;const d=DETMAP[e.estimate_id];const dv=d?Number(d.discount_total)||0:0;dsum+=dv;
+    return '<tr><td style="text-align:left">'+esc(e.estimate_number||'')+'</td><td style="text-align:left">'+esc(String(e.date||'').slice(0,10))+'</td><td style="text-align:left">'+esc(e.customer_name||'')+'</td><td style="text-align:left">'+esc(sp(e))+'</td><td style="text-align:left">'+esc(e.status||'')+'</td>'+(showDisc?'<td>'+fmtINR(dv)+'</td>':'')+'<td>'+fmtINR(t)+'</td></tr>';}).join('');
+  const head='<tr><th style="text-align:left">Quote #</th><th style="text-align:left">Date</th><th style="text-align:left">Customer</th><th style="text-align:left">POC</th><th style="text-align:left">Status</th>'+(showDisc?'<th>Discount</th>':'')+'<th>Total</th></tr>';
+  const foot='<tr style="font-weight:700;border-top:2px solid var(--line)"><td style="text-align:left" colspan="'+(showDisc?6:5)+'">'+list.length+' quotation(s)</td>'+(showDisc?'<td>'+fmtINR(dsum)+'</td>':'')+'<td>'+fmtINR(sum)+'</td></tr>';
+  $('drillTitle').textContent=title+' · '+periodLabel();
+  $('drillBody').innerHTML=list.length?('<div class="panel" style="overflow-x:auto"><table>'+head+rows+foot+'</table></div>'+(showDisc?'<div class="note">Discount figures come from scanned quotations for this period.</div>':'')):'<div class="empty">No quotations match this metric for the current filters.</div>';
+  $('drillModal').style.display='flex';}
 function rankCards(){const medal='🥇';
   function top(arr,val,asc){return arr.slice().filter(p=>p.count>0).sort((a,b)=>asc?(val(a)-val(b)):(val(b)-val(a)));}
   function card(title,arr,fmt){const w=arr[0];if(!w)return '<div class="rank"><div class="t">'+title+'</div><div class="w">—</div></div>';
@@ -1826,6 +1859,10 @@ function init(){
   document.querySelectorAll('#dsb .dnav[data-sec]').forEach(function(b){b.onclick=function(){document.querySelectorAll('#dsb .dnav').forEach(function(x){x.classList.remove('on');});b.classList.add('on');var el=document.getElementById(b.getAttribute('data-sec'));if(el)el.scrollIntoView({behavior:'smooth',block:'start'});};});
   var nb=$('navBuilder');if(nb)nb.onclick=function(){var t=document.querySelector('.navtab[data-view="builder"]');if(t)t.click();};
   var nr=$('navRefresh');if(nr)nr.onclick=function(){build(true);};
+  // Drill-down modal close (button, click outside, Esc)
+  var dc=$('drillClose');if(dc)dc.onclick=function(){$('drillModal').style.display='none';};
+  var dm=$('drillModal');if(dm)dm.onclick=function(e){if(e.target===dm)dm.style.display='none';};
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('drillModal'))$('drillModal').style.display='none';});
   window.__dashOnShow=function(){if(window.__dashStarted){try{renderCharts();}catch(_){}return;}window.__dashStarted=true;build(false);};
 }
 init();
