@@ -1865,25 +1865,27 @@ async function loadPayments(){
   }
   PAY=all;
 }
-function invPoc(v){return String(v.salesperson_name||'').trim()||String(v.created_by||'').trim()||'(Unassigned)';}
+function invPoc(v){return canonPoc(String(v.salesperson_name||'').trim()||String(v.created_by||'').trim());}
+function invDate(v){return String(v.invoice_date||v.date||v.due_date||v.created_time||'').slice(0,10);}
 function dueTable(){
-  const f=activeFilter();
+  // Current open balances: accepted/invoiced quotes not fully paid. Zoho's invoice balance = invoiced − received,
+  // so partial payments (e.g. half now, half next month) keep the remainder here until cleared. Not period-bound.
   let rows=INV.filter(v=>{const bal=Number(v.balance)||0,st=String(v.status||'').toLowerCase();
-    return bal>0&&st!=='void'&&st!=='draft'&&inFilter(v.date,f)&&pocPass(invPoc(v));});
+    return bal>0&&st!=='void'&&st!=='draft'&&pocPass(invPoc(v));});
   rows.sort((a,b)=>(Number(b.balance)||0)-(Number(a.balance)||0));
   const totDue=rows.reduce((a,v)=>a+(Number(v.balance)||0),0),totInv=rows.reduce((a,v)=>a+(Number(v.total)||0),0);
   const partial=rows.filter(v=>(Number(v.balance)||0)<(Number(v.total)||0)).length;
   $('dueCards').innerHTML=[['Outstanding due',fmtINR(totDue),rows.length+' open invoices'],['Invoiced (open)',fmtINR(totInv),'gross billed'],['Partially paid',String(partial),'of '+rows.length+' open']]
     .map(x=>'<div class="kpi"><div class="l">'+esc(x[0])+'</div><div class="v">'+esc(x[1])+'</div><div class="s">'+esc(x[2])+'</div></div>').join('');
-  $('dueTable').querySelector('thead').innerHTML='<tr><th>Client</th><th>POC</th><th>Invoice</th><th>Invoiced ₹</th><th>Received ₹</th><th>Due ₹</th><th>Status</th></tr>';
+  $('dueTable').querySelector('thead').innerHTML='<tr><th>Client</th><th>POC</th><th>Invoice</th><th>Date</th><th>Invoiced ₹</th><th>Received ₹</th><th>Due ₹</th><th>Status</th></tr>';
   const maxDue=Math.max(1,...rows.map(v=>Number(v.balance)||0));
   $('dueTable').querySelector('tbody').innerHTML=rows.slice(0,200).map(v=>{const tot=Number(v.total)||0,bal=Number(v.balance)||0,rec=tot-bal,st=String(v.status||'').toLowerCase();
     const badge=st==='partially_paid'?'Partially paid':(st==='overdue'?'Overdue':(st==='sent'?'Unpaid':(st==='viewed'?'Unpaid (viewed)':st)));
-    return '<tr><td>'+esc(v.customer_name||'—')+'</td><td>'+esc(invPoc(v))+'</td><td>'+esc(v.invoice_number||'')+'</td><td>'+fmtINR(tot)+'</td><td>'+fmtINR(rec)+'</td>'+
+    return '<tr><td style="text-align:left">'+esc(v.customer_name||'—')+'</td><td style="text-align:left">'+esc(invPoc(v))+'</td><td style="text-align:left">'+esc(v.invoice_number||'')+'</td><td style="text-align:left">'+esc(invDate(v))+'</td><td>'+fmtINR(tot)+'</td><td>'+fmtINR(rec)+'</td>'+
       '<td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*bal/maxDue)+'px;background:var(--danger)"></span><span><b>'+fmtINR(bal)+'</b></span></div></td><td>'+esc(badge)+'</td></tr>';}).join('')
-    ||'<tr><td colspan="7" class="empty">No outstanding invoices in this period</td></tr>';
-  $('dueScope').textContent='· '+periodLabel()+(POCSEL.size?(' · '+POCSEL.size+' POC'):'');
-  $('dueNote').textContent='From Zoho invoices with an unpaid balance. Due = invoice balance · Received = total − balance. Filtered by invoice date (period) and selected POCs. Drafts & voided excluded.';
+    ||'<tr><td colspan="8" class="empty">No outstanding balances 🎉</td></tr>';
+  $('dueScope').textContent='· current open balances'+(POCSEL.size?(' · '+POCSEL.size+' POC'):'');
+  $('dueNote').textContent='Accepted/invoiced quotes not yet fully paid. Due = invoiced − received (Zoho invoice balance) — partial payments keep the remainder here until cleared. Shown across all periods; filtered by selected POC. Drafts & voided excluded.';
 }
 /* ---------- Quarterly vs Yearly plans ---------- */
 function termCards(){const q=TERM.quarter,y=TERM.year;
