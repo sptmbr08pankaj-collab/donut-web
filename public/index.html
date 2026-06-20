@@ -1571,6 +1571,8 @@ const POC_ALIASES={'shreya gupta':'Shreya Jindal'};
 function canonPoc(name){const t=String(name||'').trim().replace(/\s+/g,' ');if(!t)return '(Unassigned)';const lc=t.toLowerCase();return POC_ALIASES[lc]||_ACTIVE_LC[lc]||t;}
 const sp=e=>canonPoc(e.salesperson_name);
 const isAcc=s=>ACCEPTED.indexOf(String(s||'').toLowerCase())>=0;
+// Date a quote was actually accepted/paid (used for monthly tracking of accepted value), not the quote date.
+const acceptedDate=e=>String((e&&(e.accepted_date||e.last_modified_time||e.date))||'').slice(0,10);
 
 async function loadSummaries(){
   setStatus('Loading quotations…');let all=[],page=1;
@@ -1656,11 +1658,14 @@ function termOf(l){const s=String(l.name||'').toLowerCase();
   return '';}
 function compute(){
   const f=activeFilter();const st=STATUSF;
+  // Quoting activity — bucketed by the quote date.
   const FSUM=SUM.filter(e=>inFilter(e.date,f)&&statusPass(e.status,st)&&pocPass(sp(e)));
+  // Accepted / invoiced — bucketed by the date it was ACCEPTED/paid (accepted_date), not the quote date.
+  const FACC=SUM.filter(e=>isAcc(e.status)&&inFilter(acceptedDate(e),f)&&pocPass(sp(e)));
   const FDET=detRows().filter(d=>isTrackable(d.status)&&inFilter(d.date,f)&&statusPass(d.status,st)&&pocPass(d.sp));
   const P={};function poc(n){return P[n]||(P[n]={name:n,count:0,quoted:0,accepted:0,acceptedCount:0,custQ:{},custA:{},discSum:0,discPctSum:0,discCount:0,scanN:0});}
-  FSUM.forEach(e=>{const p=poc(sp(e));p.count++;p.quoted+=Number(e.total)||0;if(e.customer_id)p.custQ[e.customer_id]=1;
-    if(isAcc(e.status)){p.accepted+=Number(e.total)||0;p.acceptedCount++;if(e.customer_id)p.custA[e.customer_id]=1;}});
+  FSUM.forEach(e=>{const p=poc(sp(e));p.count++;p.quoted+=Number(e.total)||0;if(e.customer_id)p.custQ[e.customer_id]=1;});
+  FACC.forEach(e=>{const p=poc(sp(e));p.accepted+=Number(e.total)||0;p.acceptedCount++;if(e.customer_id)p.custA[e.customer_id]=1;});
   const items={},term={quarter:{units:0,rev:0,n:0},year:{units:0,rev:0,n:0}},termItems={};
   FDET.forEach(d=>{const p=poc(d.sp);p.scanN++;p.discSum+=d.discount_total;
     if(d.discount_percent>0){p.discPctSum+=d.discount_percent;p.discCount++;}
@@ -1674,7 +1679,7 @@ function compute(){
   TERM=term;TERMITEMS=Object.values(termItems);
   const ddisc=FDET.filter(d=>d.discount_percent>0);
   ORGM={count:FSUM.length,quoted:POCS.reduce((a,p)=>a+p.quoted,0),accepted:POCS.reduce((a,p)=>a+p.accepted,0),
-    custA:Object.keys(FSUM.filter(e=>isAcc(e.status)).reduce((m,e)=>{if(e.customer_id)m[e.customer_id]=1;return m;},{})).length,
+    custA:Object.keys(FACC.reduce((m,e)=>{if(e.customer_id)m[e.customer_id]=1;return m;},{})).length,
     custQ:Object.keys(FSUM.reduce((m,e)=>{if(e.customer_id)m[e.customer_id]=1;return m;},{})).length,
     disc:POCS.reduce((a,p)=>a+p.disc,0),avgDisc:ddisc.length?ddisc.reduce((a,d)=>a+d.discount_percent,0)/ddisc.length:0,discCount:ddisc.length,detN:FDET.length};
   ORGM.aov=ORGM.count?ORGM.quoted/ORGM.count:0;
@@ -1698,21 +1703,24 @@ function orgCards(){const m=ORGM;const c=[['Quotations',String(m.count),''],['Qu
 // Drill-down: list the quotations that make up a Summary metric (respects current period/status/POC filters).
 function openDrill(metric,pocOverride){
   const f=activeFilter(),st=STATUSF;
-  let list=SUM.filter(e=>inFilter(e.date,f)&&statusPass(e.status,st)&&(pocOverride?sp(e)===pocOverride:pocPass(sp(e))));
-  let title='All quotations',showDisc=false;
-  if(metric==='accepted'){list=list.filter(e=>isAcc(e.status));title='Accepted / invoiced quotations';}
-  else if(metric==='customers'){list=list.filter(e=>isAcc(e.status));title='Customers acquired (accepted / invoiced)';}
-  else if(metric==='discount'||metric==='avgdisc'){showDisc=true;list=list.filter(e=>{const d=DETMAP[e.estimate_id];return d&&Number(d.discount_total)>0;});title='Discounted quotations';}
-  else if(metric==='quoted'){title='All quotations — quoted value';}
-  else if(metric==='aov'){title='All quotations (AOV basis)';}
-  list.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-  let sum=0,dsum=0;
+  const pocOk=e=>pocOverride?sp(e)===pocOverride:pocPass(sp(e));
+  const acc=(metric==='accepted'||metric==='customers');
+  let list,title='All quotations',showDisc=false,showAcc=false;
+  if(acc){showAcc=true;title=(metric==='customers'?'Customers acquired (accepted / invoiced)':'Accepted / invoiced quotations');
+    list=SUM.filter(e=>isAcc(e.status)&&inFilter(acceptedDate(e),f)&&pocOk(e));}
+  else{list=SUM.filter(e=>inFilter(e.date,f)&&statusPass(e.status,st)&&pocOk(e));
+    if(metric==='discount'||metric==='avgdisc'){showDisc=true;list=list.filter(e=>{const d=DETMAP[e.estimate_id];return d&&Number(d.discount_total)>0;});title='Discounted quotations';}
+    else if(metric==='quoted'){title='All quotations — quoted value';}
+    else if(metric==='aov'){title='All quotations (AOV basis)';}}
+  list.sort((a,b)=>String(acc?acceptedDate(b):(b.date||'')).localeCompare(String(acc?acceptedDate(a):(a.date||''))));
+  let sum=0,dsum=0;const cols=5+(showAcc?1:0)+(showDisc?1:0)+1;
   const rows=list.map(e=>{const t=Number(e.total)||0;sum+=t;const d=DETMAP[e.estimate_id];const dv=d?Number(d.discount_total)||0:0;dsum+=dv;
-    return '<tr><td style="text-align:left">'+esc(e.estimate_number||'')+'</td><td style="text-align:left">'+esc(String(e.date||'').slice(0,10))+'</td><td style="text-align:left">'+esc(e.customer_name||'')+'</td><td style="text-align:left">'+esc(sp(e))+'</td><td style="text-align:left">'+esc(e.status||'')+'</td>'+(showDisc?'<td>'+fmtINR(dv)+'</td>':'')+'<td>'+fmtINR(t)+'</td></tr>';}).join('');
-  const head='<tr><th style="text-align:left">Quote #</th><th style="text-align:left">Date</th><th style="text-align:left">Customer</th><th style="text-align:left">POC</th><th style="text-align:left">Status</th>'+(showDisc?'<th>Discount</th>':'')+'<th>Total</th></tr>';
-  const foot='<tr style="font-weight:700;border-top:2px solid var(--line)"><td style="text-align:left" colspan="'+(showDisc?6:5)+'">'+list.length+' quotation(s)</td>'+(showDisc?'<td>'+fmtINR(dsum)+'</td>':'')+'<td>'+fmtINR(sum)+'</td></tr>';
+    return '<tr><td style="text-align:left">'+esc(e.estimate_number||'')+'</td><td style="text-align:left">'+esc(String(e.date||'').slice(0,10))+'</td><td style="text-align:left">'+esc(e.customer_name||'')+'</td><td style="text-align:left">'+esc(sp(e))+'</td><td style="text-align:left">'+esc(e.status||'')+'</td>'+(showAcc?'<td style="text-align:left">'+esc(acceptedDate(e))+'</td>':'')+(showDisc?'<td>'+fmtINR(dv)+'</td>':'')+'<td>'+fmtINR(t)+'</td></tr>';}).join('');
+  const head='<tr><th style="text-align:left">Quote #</th><th style="text-align:left">Date</th><th style="text-align:left">Customer</th><th style="text-align:left">POC</th><th style="text-align:left">Status</th>'+(showAcc?'<th style="text-align:left">Accepted</th>':'')+(showDisc?'<th>Discount</th>':'')+'<th>Total</th></tr>';
+  const foot='<tr style="font-weight:700;border-top:2px solid var(--line)"><td style="text-align:left" colspan="'+(showDisc?cols-2:cols-1)+'">'+list.length+' quotation(s)</td>'+(showDisc?'<td>'+fmtINR(dsum)+'</td>':'')+'<td>'+fmtINR(sum)+'</td></tr>';
   $('drillTitle').textContent=(pocOverride?(pocOverride+' — '):'')+title+' · '+periodLabel();
-  $('drillBody').innerHTML=list.length?('<div class="panel" style="overflow-x:auto"><table>'+head+rows+foot+'</table></div>'+(showDisc?'<div class="note">Discount figures come from scanned quotations for this period.</div>':'')):'<div class="empty">No quotations match this metric for the current filters.</div>';
+  const drillNote=showAcc?'<div class="note">Accepted/invoiced quotes are counted by their <b>accepted date</b> (when payment was received), not the quote date.</div>':(showDisc?'<div class="note">Discount figures come from scanned quotations for this period.</div>':'');
+  $('drillBody').innerHTML=list.length?('<div class="panel" style="overflow-x:auto"><table>'+head+rows+foot+'</table></div>'+drillNote):'<div class="empty">No quotations match this metric for the current filters.</div>';
   $('drillModal').style.display='flex';}
 function rankCards(){const medal='🥇';
   function top(arr,val,asc){return arr.slice().filter(p=>p.count>0).sort((a,b)=>asc?(val(a)-val(b)):(val(b)-val(a)));}
@@ -1746,7 +1754,11 @@ function aovTable(){const sorted=ITEMS.slice().sort((a,b)=>b.aov-a.aov);
   $('aovTable').querySelector('thead').innerHTML='<tr><th>Item</th><th>Type</th><th>Avg / quote ₹</th><th>Units</th><th>Revenue ₹</th></tr>';
   $('aovTable').querySelector('tbody').innerHTML=sorted.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+(r.type===1?'Plan':(r.type===2?'Add-on':'Service'))+'</td><td>'+fmtINR2(r.aov)+'</td><td>'+r.units+'</td><td>'+fmtINR(r.revenue)+'</td></tr>').join('')||'<tr><td colspan="5" class="empty">No data</td></tr>';}
 
-function monthlyBuckets(){const st=STATUSF;const m={};SUM.forEach(e=>{if(!statusPass(e.status,st)||!pocPass(sp(e)))return;const ym=String(e.date||'').slice(0,7);if(ym.length<7)return;const b=m[ym]||(m[ym]={quoted:0,accepted:0,count:0});b.quoted+=Number(e.total)||0;b.count++;if(isAcc(e.status))b.accepted+=Number(e.total)||0;});return m;}
+function monthlyBuckets(){const st=STATUSF;const m={};const B=ym=>(m[ym]||(m[ym]={quoted:0,accepted:0,count:0}));
+  SUM.forEach(e=>{if(!pocPass(sp(e)))return;
+    if(statusPass(e.status,st)){const ym=String(e.date||'').slice(0,7);if(ym.length===7){const b=B(ym);b.quoted+=Number(e.total)||0;b.count++;}}
+    if(isAcc(e.status)){const ya=acceptedDate(e).slice(0,7);if(ya.length===7)B(ya).accepted+=Number(e.total)||0;}});
+  return m;}
 function makeChart(id,type,labels,datasets,money,prev){
   if(typeof Chart==='undefined')return null;if(prev){try{prev.destroy();}catch(e){}}
   return new Chart(document.getElementById(id),{type:type,data:{labels:labels,datasets:datasets},
