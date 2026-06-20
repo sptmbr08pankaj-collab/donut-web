@@ -1622,6 +1622,10 @@ const sp=e=>canonPoc(e.salesperson_name);
 const isAcc=s=>ACCEPTED.indexOf(String(s||'').toLowerCase())>=0;
 // Date a quote was actually accepted/paid (used for monthly tracking of accepted value), not the quote date.
 const acceptedDate=e=>String((e&&(e.accepted_date||e.last_modified_time||e.date))||'').slice(0,10);
+// Room-license helpers (also defined in the builder scope; redeclared here for the dashboard script).
+function isRoomLicense(name){return /additional\s*room\s*license/i.test(String(name||''));}
+const ROOM_ADDON_PRICE_D={quarter:{starter:200,connect:300,advance:400,max:600,booster:900},year:{starter:600,connect:900,advance:1200,max:2000,booster:2700}};
+function roomTierLabel(name,unitRate){const term=/year/i.test(name)?'year':((/quarter|quater/i.test(name))?'quarter':'');const tbl=ROOM_ADDON_PRICE_D[term]||{};const r=Math.round(Number(unitRate)||0);for(const t in tbl){if(tbl[t]===r)return t.charAt(0).toUpperCase()+t.slice(1);}return '';}
 // Map each customer to the POC who owns their quotation (prefer the latest accepted/invoiced quote).
 // Used to attribute payments (which carry no salesperson) to a POC for the POC filter.
 let CUSTPOC=null;
