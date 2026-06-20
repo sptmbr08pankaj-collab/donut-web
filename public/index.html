@@ -165,7 +165,7 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
 #view-dashboard .iconbtn{position:relative;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);display:grid;place-content:center;cursor:pointer}
 #view-dashboard .iconbtn:hover{color:var(--ink)}
 #view-dashboard .iconbtn .reddot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:#ef4444}
-#view-dashboard .kpi[data-metric]{cursor:pointer}#view-dashboard #pocTable tbody tr[data-poc]{cursor:pointer}#view-dashboard #pocTable tbody tr[data-poc]:hover td{background:rgba(59,130,246,.07)}#view-dashboard .rk-poc{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}#view-dashboard .rk-poc:hover{color:#2563eb}
+#view-dashboard .dsec{display:none}#view-dashboard .dsec.active{display:block}#view-dashboard .dsec>h2:first-child{margin-top:0}#view-dashboard .kpi[data-metric]{cursor:pointer}#view-dashboard #pocTable tbody tr[data-poc]{cursor:pointer}#view-dashboard #pocTable tbody tr[data-poc]:hover td{background:rgba(59,130,246,.07)}#view-dashboard .rk-poc{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}#view-dashboard .rk-poc:hover{color:#2563eb}
 #view-dashboard .drill-ov{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
 #view-dashboard .drill-box{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:920px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
 #view-dashboard .drill-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
@@ -415,46 +415,59 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
   </div>
   <div id="status">Loading…</div>
 
-  <div class="grid2" id="sec-summary">
-    <div>
-      <h2>Summary <span id="sumScope" class="hint"></span></h2>
-      <div id="orgCards" class="cards"></div>
+  <section class="dsec active" id="sec-summary">
+    <div class="grid2">
+      <div>
+        <h2>Summary <span id="sumScope" class="hint"></span></h2>
+        <div id="orgCards" class="cards"></div>
+      </div>
+      <div>
+        <h2>Trends</h2>
+        <div class="panel"><div class="hint" style="margin-bottom:6px">Month-on-month <span id="momScope"></span></div><div class="chartbox"><canvas id="momChart"></canvas></div></div>
+        <div class="panel" style="margin-top:12px"><div class="hint" style="margin-bottom:6px">Year-on-year (by month)</div><div class="chartbox"><canvas id="yoyChart"></canvas></div></div>
+      </div>
     </div>
-    <div>
-      <h2>Trends</h2>
-      <div class="panel"><div class="hint" style="margin-bottom:6px">Month-on-month <span id="momScope"></span></div><div class="chartbox"><canvas id="momChart"></canvas></div></div>
-      <div class="panel" style="margin-top:12px"><div class="hint" style="margin-bottom:6px">Year-on-year (by month)</div><div class="chartbox"><canvas id="yoyChart"></canvas></div></div>
+    <div class="note" id="caveat"></div>
+  </section>
+
+  <section class="dsec" id="sec-leaderboard">
+    <h2>Leaderboard</h2>
+    <div id="rankCards" class="rankcards"></div>
+  </section>
+
+  <section class="dsec" id="sec-poc">
+    <h2>By POC</h2>
+    <div class="panel"><table id="pocTable"><thead></thead><tbody></tbody></table></div>
+    <div class="note" id="pocNote"></div>
+  </section>
+
+  <section class="dsec" id="sec-due">
+    <h2>Outstanding payments — invoiced, not realized <span id="dueScope" class="hint"></span></h2>
+    <div id="dueCards" class="cards"></div>
+    <div class="panel" style="margin-top:10px;overflow-x:auto"><table id="dueTable"><thead></thead><tbody></tbody></table></div>
+    <div class="note" id="dueNote"></div>
+  </section>
+
+  <section class="dsec" id="sec-plans">
+    <h2>Plans — best &amp; least selling</h2>
+    <div class="panel"><table id="planTable"><thead></thead><tbody></tbody></table></div>
+    <h2>Plans — Quarterly vs Yearly</h2>
+    <div id="termCards" class="cards"></div>
+    <div class="grid2" style="margin-top:10px">
+      <div><div class="hint" style="margin-bottom:6px">Quarterly plans — highest → lowest</div><div class="panel"><table id="termQTable"><thead></thead><tbody></tbody></table></div></div>
+      <div><div class="hint" style="margin-bottom:6px">Yearly plans — highest → lowest</div><div class="panel"><table id="termYTable"><thead></thead><tbody></tbody></table></div></div>
     </div>
-  </div>
+  </section>
 
-  <h2 id="sec-leaderboard">Leaderboard</h2>
-  <div id="rankCards" class="rankcards"></div>
+  <section class="dsec" id="sec-addons">
+    <h2>Add-ons &amp; services — best &amp; least selling</h2>
+    <div class="panel"><table id="addonTable"><thead></thead><tbody></tbody></table></div>
+  </section>
 
-  <h2 id="sec-poc">By POC</h2>
-  <div class="panel"><table id="pocTable"><thead></thead><tbody></tbody></table></div>
-  <div class="note" id="pocNote"></div>
-
-  <h2 id="sec-due">Outstanding payments — invoiced, not realized <span id="dueScope" class="hint"></span></h2>
-  <div id="dueCards" class="cards"></div>
-  <div class="panel" style="margin-top:10px;overflow-x:auto"><table id="dueTable"><thead></thead><tbody></tbody></table></div>
-  <div class="note" id="dueNote"></div>
-
-  <div class="grid2" id="sec-plans">
-    <div><h2>Plans — best &amp; least selling</h2><div class="panel"><table id="planTable"><thead></thead><tbody></tbody></table></div></div>
-    <div id="sec-addons"><h2>Add-ons &amp; services — best &amp; least selling</h2><div class="panel"><table id="addonTable"><thead></thead><tbody></tbody></table></div></div>
-  </div>
-
-  <h2>Plans — Quarterly vs Yearly</h2>
-  <div id="termCards" class="cards"></div>
-  <div class="grid2" style="margin-top:10px">
-    <div><div class="hint" style="margin-bottom:6px">Quarterly plans — highest → lowest</div><div class="panel"><table id="termQTable"><thead></thead><tbody></tbody></table></div></div>
-    <div><div class="hint" style="margin-bottom:6px">Yearly plans — highest → lowest</div><div class="panel"><table id="termYTable"><thead></thead><tbody></tbody></table></div></div>
-  </div>
-
-  <h2 id="sec-aov">Average order value by item</h2>
-  <div class="panel"><table id="aovTable"><thead></thead><tbody></tbody></table></div>
-
-  <div class="note" id="caveat"></div>
+  <section class="dsec" id="sec-aov">
+    <h2>Average order value by item</h2>
+    <div class="panel"><table id="aovTable"><thead></thead><tbody></tbody></table></div>
+  </section>
   </div>
   <div id="drillModal" class="drill-ov" style="display:none">
     <div class="drill-box">
@@ -1879,6 +1892,13 @@ function termCards(){const q=TERM.quarter,y=TERM.year;
 function termTable(elId,term){const arr=TERMITEMS.filter(t=>t.term===term).sort((a,b)=>b.units-a.units);
   $(elId).querySelector('thead').innerHTML='<tr><th>Plan</th><th>Units</th><th>Revenue ₹</th></tr>';
   $(elId).querySelector('tbody').innerHTML=arr.map((r,i)=>'<tr><td>'+(i===0?'▲ ':(i===arr.length-1&&arr.length>1?'▼ ':''))+esc(r.name)+'</td><td>'+r.units+'</td><td>'+fmtINR(r.revenue)+'</td></tr>').join('')||'<tr><td colspan="3" class="empty">No '+term+' plans in this period/scan</td></tr>';}
+// Show one dashboard section at a time (sidebar acts like tabs).
+function showSection(id){
+  document.querySelectorAll('#view-dashboard .dsec').forEach(function(s){s.classList.toggle('active',s.id===id);});
+  document.querySelectorAll('#dsb .dnav[data-sec]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-sec')===id);});
+  if(id==='sec-summary'){try{renderCharts();}catch(e){}}
+  try{window.scrollTo(0,0);}catch(e){}
+}
 function render(){
   compute();orgCards();rankCards();pocTable();
   itemTable('planTable',ITEMS.filter(i=>i.type===1));
@@ -1931,7 +1951,7 @@ function init(){
   $('themeToggle').onclick=function(){setDark(!$('dashroot').classList.contains('dark'));};
   if(localStorage.getItem('donut_dark')==='1')setDark(true);
   // Sidebar nav: scroll to section + active state
-  document.querySelectorAll('#dsb .dnav[data-sec]').forEach(function(b){b.onclick=function(){document.querySelectorAll('#dsb .dnav').forEach(function(x){x.classList.remove('on');});b.classList.add('on');var el=document.getElementById(b.getAttribute('data-sec'));if(el)el.scrollIntoView({behavior:'smooth',block:'start'});};});
+  document.querySelectorAll('#dsb .dnav[data-sec]').forEach(function(b){b.onclick=function(){showSection(b.getAttribute('data-sec'));};});
   var nb=$('navBuilder');if(nb)nb.onclick=function(){var t=document.querySelector('.navtab[data-view="builder"]');if(t)t.click();};
   var nr=$('navRefresh');if(nr)nr.onclick=function(){build(true);};
   // Drill-down modal close (button, click outside, Esc)
