@@ -456,6 +456,7 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
 
   <section class="dsec" id="sec-due">
     <h2>Outstanding payments — invoiced, not realized <span id="dueScope" class="hint"></span></h2>
+    <div id="adjPanel"></div>
     <div id="dueCards" class="cards"></div>
     <div class="panel" style="margin-top:10px;overflow-x:auto"><table id="dueTable"><thead></thead><tbody></tbody></table></div>
     <div class="note" id="dueNote"></div>
@@ -486,6 +487,18 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
     <div class="drill-box">
       <div class="drill-head"><h3 id="drillTitle"></h3><button id="drillClose" class="iconbtn" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
       <div id="drillBody" class="drill-body"></div>
+    </div>
+  </div>
+  <div id="adjModal" class="drill-ov" style="display:none">
+    <div class="drill-box" style="max-width:440px">
+      <div class="drill-head"><h3 id="adjTitle">Adjust outstanding</h3><button id="adjClose" class="iconbtn" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+      <div class="drill-body" style="display:flex;flex-direction:column;gap:12px">
+        <div><label class="lbl">Outstanding amount (₹)</label><input id="adjAmount" type="number" min="0" step="1" style="width:100%"></div>
+        <div><label class="lbl">Next billing date <span class="hint">(when balance is expected)</span></label><input id="adjDate" type="date" style="width:100%"></div>
+        <div><label class="lbl">Comment</label><textarea id="adjComment" rows="3" style="width:100%" placeholder="e.g. Customer paying 50% now, balance next month"></textarea></div>
+        <div class="note">Saved on this device only — not synced to Zoho.</div>
+        <div style="display:flex;gap:8px"><button id="adjSave" class="primary" style="flex:1">Save</button><button id="adjReset" class="ghost">Clear adjustment</button></div>
+      </div>
     </div>
   </div>
 </div>
@@ -725,6 +738,9 @@ const ROOM_ADDON_PRICE={quarter:{starter:200,connect:300,advance:400,max:600,boo
 const ROOM_ADDON_ID={quarter:{starter:'3296275000001502779',connect:'3296275000001502823',advance:'3296275000003418058',max:'3296275000001502853',booster:'3296275000001502883'},
   year:{starter:'3296275000001502808',connect:'3296275000001502838',advance:'3296275000003418066',max:'3296275000001502868',booster:'3296275000001502898'}};
 function roomLicenseAddonId(q){const plan=(q.lines||[]).find(l=>l.kind==='plan');if(!plan)return '';const term=(periodOf(plan.name,plan.unit)==='year')?'year':'quarter';const tier=planTier(plan.name);return (ROOM_ADDON_ID[term]&&ROOM_ADDON_ID[term][tier])||'';}
+// Room-license add-ons share one display name per term but differ by plan tier (per-room price).
+// For performance we split them by tier so each variant is ranked separately.
+function roomTierLabel(name,unitRate){const term=/year/i.test(name)?'year':((/quarter|quater/i.test(name))?'quarter':'');const tbl=ROOM_ADDON_PRICE[term]||{};const r=Math.round(Number(unitRate)||0);for(const t in tbl){if(tbl[t]===r)return t.charAt(0).toUpperCase()+t.slice(1);}return '';}
 function planTier(name){const s=String(name||'').toLowerCase();if(s.indexOf('booster')>=0)return 'booster';if(s.indexOf('max')>=0)return 'max';if(s.indexOf('advance')>=0)return 'advance';if(s.indexOf('connect')>=0)return 'connect';if(s.indexOf('starter')>=0)return 'starter';return '';}
 function planBaseRooms(name){return BASE_ROOMS[planTier(name)]||15;}
 function roomAddonPrice(name,term){const tm=(term==='year')?'year':'quarter';const t=planTier(name);return (ROOM_ADDON_PRICE[tm]&&ROOM_ADDON_PRICE[tm][t])||0;}
@@ -1576,6 +1592,13 @@ const fmtINR2=n=>'₹'+Number(n||0).toLocaleString('en-IN',{minimumFractionDigit
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function fmtShort(v){v=Number(v)||0;const a=Math.abs(v);if(a>=1e7)return (v/1e7).toFixed(1)+'Cr';if(a>=1e5)return (v/1e5).toFixed(1)+'L';if(a>=1e3)return (v/1e3).toFixed(0)+'k';return String(Math.round(v));}
 let SUM=[],DETMAP={},INV=[],PAY=[],POCS=[],ITEMS=[],ORGM={},SORT={key:'accepted',dir:-1},momC=null,yoyC=null;
+// Manual outstanding adjustments per POC (amount override, comment, next billing date) — LOCAL ONLY, never synced to Zoho.
+function loadOutAdj(){try{return JSON.parse(localStorage.getItem('donut_out_adj')||'{}');}catch(e){return {};}}
+function saveOutAdj(){try{localStorage.setItem('donut_out_adj',JSON.stringify(OUTADJ));}catch(e){}}
+let OUTADJ=loadOutAdj();
+function adjOf(poc){return OUTADJ[poc]||{};}
+function hasAdjAmt(a){return a&&a.amount!==undefined&&a.amount!==''&&a.amount!==null;}
+function effOutstanding(r){const a=adjOf(r.name);return hasAdjAmt(a)?(Number(a.amount)||0):r.outstanding;}
 let PERIOD='all',STATUSF='nondraft',METRIC='quoted',CFROM='',CTO='';
 let POCSEL=new Set();
 let TERM={quarter:{units:0,rev:0,n:0},year:{units:0,rev:0,n:0}},TERMITEMS=[];
@@ -1726,7 +1749,12 @@ function compute(){
   const items={},term={quarter:{units:0,rev:0,n:0},year:{units:0,rev:0,n:0}},termItems={};
   FDET.forEach(d=>{const p=poc(d.sp);p.scanN++;p.discSum+=d.discount_total;
     if(d.discount_percent>0){p.discPctSum+=d.discount_percent;p.discCount++;}
-    d.lines.forEach(l=>{if(!l.name)return;const k=l.name.toLowerCase();const it=items[k]||(items[k]={name:l.name,type:l.type,units:0,revenue:0,orders:0});
+    d.lines.forEach(l=>{if(!l.name)return;
+      const isRoom=isRoomLicense(l.name);const unitRate=l.qty?l.total/l.qty:l.total;
+      const tier=isRoom?roomTierLabel(l.name,unitRate):'';
+      const k=isRoom?(l.name.toLowerCase()+'|'+Math.round(unitRate)):l.name.toLowerCase();
+      const label=isRoom?(l.name+(tier?(' — '+tier):'')+' (₹'+Math.round(unitRate)+'/room)'):l.name;
+      const it=items[k]||(items[k]={name:label,type:l.type,units:0,revenue:0,orders:0});
       it.units+=l.qty;it.revenue+=l.total;it.orders++;if(l.type===1)it.type=1;else if(l.type===2&&it.type!==1)it.type=2;
       if(l.type===1){const tm=termOf(l);if(tm){term[tm].units+=l.qty;term[tm].rev+=l.total;term[tm].n++;const tk=tm+'|'+k;const ti=termItems[tk]||(termItems[tk]={name:l.name,term:tm,units:0,revenue:0,orders:0});ti.units+=l.qty;ti.revenue+=l.total;ti.orders++;}}
     });});
@@ -1809,13 +1837,35 @@ function pocTable(){
   const cols=[['name','POC'],['count','Quotes'],['quoted','Quoted ₹'],['accepted','Accepted ₹'],['realized','Realized ₹'],['outstanding','Outstanding ₹'],['aov','AOV ₹'],['custA','Customers'],['disc','Discount ₹'],['avgDisc','Avg disc %']];
   const rows=POCS.slice().sort((a,b)=>{const k=SORT.key,va=a[k],vb=b[k];if(typeof va==='string')return SORT.dir*va.localeCompare(vb);return SORT.dir*(va-vb);});
   const maxAcc=Math.max(1,...rows.map(r=>r.accepted));
-  $('pocTable').querySelector('thead').innerHTML='<tr>'+cols.map(c=>'<th data-k="'+c[0]+'">'+c[1]+(SORT.key===c[0]?(SORT.dir<0?' ▾':' ▴'):'')+'</th>').join('')+'</tr>';
-  $('pocTable').querySelector('tbody').innerHTML=rows.map(function(r){var me=window.__DONUT_POC&&String(r.name||'').trim().toLowerCase()===String(window.__DONUT_POC).trim().toLowerCase();return '<tr data-poc="'+esc(r.name)+'"'+(me?' style="background:#eaf2ff;font-weight:600"':'')+'><td>'+(me?'★ ':'')+esc(r.name)+'</td><td>'+r.count+'</td><td>'+fmtINR(r.quoted)+'</td>'+
+  $('pocTable').querySelector('thead').innerHTML='<tr>'+cols.map(c=>'<th data-k="'+c[0]+'">'+c[1]+(SORT.key===c[0]?(SORT.dir<0?' ▾':' ▴'):'')+'</th>').join('')+'<th>Next billing</th><th>Adjust</th></tr>';
+  $('pocTable').querySelector('tbody').innerHTML=rows.map(function(r){var me=window.__DONUT_POC&&String(r.name||'').trim().toLowerCase()===String(window.__DONUT_POC).trim().toLowerCase();
+    const a=adjOf(r.name);const outv=effOutstanding(r);const manual=hasAdjAmt(a);
+    return '<tr data-poc="'+esc(r.name)+'"'+(me?' style="background:#eaf2ff;font-weight:600"':'')+'><td>'+(me?'★ ':'')+esc(r.name)+'</td><td>'+r.count+'</td><td>'+fmtINR(r.quoted)+'</td>'+
     '<td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*r.accepted/maxAcc)+'px"></span><span>'+fmtINR(r.accepted)+'</span></div></td>'+
-    '<td>'+fmtINR(r.realized)+'</td><td'+(r.outstanding>0?' style="color:var(--danger);font-weight:600"':'')+'>'+fmtINR(r.outstanding)+'</td>'+
-    '<td>'+fmtINR(r.aov)+'</td><td>'+r.custA+'</td><td>'+fmtINR(r.disc)+'</td><td>'+(r.discCount?r.avgDisc.toFixed(1)+'%':'—')+'</td></tr>';}).join('')||'<tr><td colspan="10" class="empty">No quotations in this period</td></tr>';
-  $('pocTable').querySelector('thead').querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(SORT.key===k)SORT.dir*=-1;else{SORT.key=k;SORT.dir=-1;}pocTable();});
+    '<td>'+fmtINR(r.realized)+'</td><td'+(outv>0?' style="color:var(--danger);font-weight:600"':'')+(a.comment?(' title="'+esc(a.comment)+'"'):'')+'>'+fmtINR(outv)+(manual?' <span style="color:var(--accent)" title="Manually adjusted (local)">✎</span>':'')+'</td>'+
+    '<td>'+fmtINR(r.aov)+'</td><td>'+r.custA+'</td><td>'+fmtINR(r.disc)+'</td><td>'+(r.discCount?r.avgDisc.toFixed(1)+'%':'—')+'</td>'+
+    '<td style="text-align:left">'+esc(a.nextDate||'—')+'</td><td><button class="ghost" data-adj="'+esc(r.name)+'" style="padding:2px 9px;font-size:12px">Adjust</button></td></tr>';}).join('')||'<tr><td colspan="12" class="empty">No quotations in this period</td></tr>';
+  $('pocTable').querySelector('thead').querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(SORT.key===k)SORT.dir*=-1;else{SORT.key=k;SORT.dir=-1;}pocTable();});
+  $('pocTable').querySelectorAll('button[data-adj]').forEach(b=>b.onclick=function(e){e.stopPropagation();openAdjust(b.getAttribute('data-adj'));});
   $('pocTable').querySelectorAll('tbody tr[data-poc]').forEach(tr=>tr.onclick=()=>openDrill('count',tr.getAttribute('data-poc')));}
+function openAdjust(poc){const a=adjOf(poc),r=POCS.find(p=>p.name===poc);
+  $('adjTitle').textContent='Adjust outstanding — '+poc;
+  $('adjAmount').value=hasAdjAmt(a)?a.amount:(r?Math.round(r.outstanding):'');
+  $('adjDate').value=a.nextDate||'';$('adjComment').value=a.comment||'';
+  $('adjModal').setAttribute('data-poc',poc);$('adjModal').style.display='flex';}
+function saveAdjust(){const poc=$('adjModal').getAttribute('data-poc');if(!poc)return;
+  const amt=$('adjAmount').value,date=$('adjDate').value,c=$('adjComment').value;
+  if(amt===''&&!date&&!c.trim())delete OUTADJ[poc];else OUTADJ[poc]={amount:amt===''?'':Number(amt),nextDate:date,comment:c};
+  saveOutAdj();$('adjModal').style.display='none';render();}
+function resetAdjust(){const poc=$('adjModal').getAttribute('data-poc');if(poc){delete OUTADJ[poc];saveOutAdj();}$('adjModal').style.display='none';render();}
+function renderAdjPanel(){const box=$('adjPanel');if(!box)return;
+  const entries=Object.keys(OUTADJ).map(k=>Object.assign({poc:k},OUTADJ[k])).filter(a=>hasAdjAmt(a)||a.nextDate||(a.comment&&String(a.comment).trim()));
+  if(!entries.length){box.innerHTML='';return;}
+  box.innerHTML='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)"><div style="font-weight:700;font-size:13px;margin-bottom:8px">✎ Manual outstanding adjustments <span class="hint">(local only — not synced to Zoho)</span></div>'+
+    '<table><thead><tr><th style="text-align:left">POC</th><th>Outstanding ₹</th><th style="text-align:left">Next billing</th><th style="text-align:left">Comment</th><th></th></tr></thead><tbody>'+
+    entries.map(a=>'<tr><td style="text-align:left">'+esc(a.poc)+'</td><td>'+(hasAdjAmt(a)?fmtINR(Number(a.amount)||0):'—')+'</td><td style="text-align:left">'+esc(a.nextDate||'—')+'</td><td style="text-align:left">'+esc(a.comment||'')+'</td><td><button class="ghost" data-adj2="'+esc(a.poc)+'" style="padding:2px 9px;font-size:12px">Edit</button></td></tr>').join('')+
+    '</tbody></table></div>';
+  box.querySelectorAll('button[data-adj2]').forEach(b=>b.onclick=()=>openAdjust(b.getAttribute('data-adj2')));}
 function itemTable(elId,arr){
   if(!arr.length){$(elId).querySelector('thead').innerHTML='';$(elId).querySelector('tbody').innerHTML='<tr><td class="empty">No items in scanned window / period</td></tr>';return;}
   const sorted=arr.slice().sort((a,b)=>b.revenue-a.revenue);const max=Math.max(1,...sorted.map(r=>r.revenue));
@@ -1916,6 +1966,7 @@ function dueTable(){
     return '<tr><td style="text-align:left">'+esc(v.customer_name||'—')+'</td><td style="text-align:left">'+esc(invPoc(v))+'</td><td style="text-align:left">'+esc(v.invoice_number||'')+'</td><td style="text-align:left">'+esc(invDate(v))+'</td><td>'+fmtINR(tot)+'</td><td>'+fmtINR(rec)+'</td>'+
       '<td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*bal/maxDue)+'px;background:var(--danger)"></span><span><b>'+fmtINR(bal)+'</b></span></div></td><td>'+esc(badge)+'</td></tr>';}).join('')
     ||'<tr><td colspan="8" class="empty">No outstanding balances 🎉</td></tr>';
+  renderAdjPanel();
   $('dueScope').textContent='· current open balances'+(POCSEL.size?(' · '+POCSEL.size+' POC'):'');
   $('dueNote').textContent='Accepted/invoiced quotes not yet fully paid. Due = invoiced − received (Zoho invoice balance) — partial payments keep the remainder here until cleared. Shown across all periods; filtered by selected POC. Drafts & voided excluded.';
 }
@@ -1994,7 +2045,12 @@ function init(){
   // Drill-down modal close (button, click outside, Esc)
   var dc=$('drillClose');if(dc)dc.onclick=function(){$('drillModal').style.display='none';};
   var dm=$('drillModal');if(dm)dm.onclick=function(e){if(e.target===dm)dm.style.display='none';};
-  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('drillModal'))$('drillModal').style.display='none';});
+  // Manual outstanding adjustment modal
+  if($('adjClose'))$('adjClose').onclick=function(){$('adjModal').style.display='none';};
+  if($('adjModal'))$('adjModal').onclick=function(e){if(e.target===$('adjModal'))$('adjModal').style.display='none';};
+  if($('adjSave'))$('adjSave').onclick=saveAdjust;
+  if($('adjReset'))$('adjReset').onclick=resetAdjust;
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'){if($('drillModal'))$('drillModal').style.display='none';if($('adjModal'))$('adjModal').style.display='none';}});
   window.__dashOnShow=function(){if(window.__dashStarted){try{renderCharts();}catch(_){}return;}window.__dashStarted=true;build(false);};
 }
 init();
