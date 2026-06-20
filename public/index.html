@@ -2100,6 +2100,14 @@ init();
 #view-hubspot .bbar{height:8px;border-radius:4px;background:var(--brand);display:inline-block;vertical-align:middle;margin-right:8px}
 #view-hubspot .hubhint{font-size:12px;color:var(--muted)}
 #view-hubspot .hsec{display:none}#view-hubspot .hsec.on{display:block}
+#view-hubspot .hk.clk{cursor:pointer}
+#view-hubspot .hk.clk:hover{box-shadow:0 4px 14px rgba(15,23,42,.1)}
+#view-hubspot .hubmodal{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
+#view-hubspot .hubmbox{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:680px;width:100%;max-height:82vh;display:flex;flex-direction:column;overflow:hidden}
+#view-hubspot .hubmhead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);font-size:14px;color:var(--ink)}
+#view-hubspot .hubmbody{padding:6px 16px 16px;overflow:auto}
+#view-hubspot .hublink{color:var(--brand);text-decoration:none;font-weight:600;font-size:12px}
+#view-hubspot .hublink:hover{text-decoration:underline}
 </style>
 <div class="hubwrap">
   <div class="hubhead">
@@ -2136,6 +2144,12 @@ init();
       <p class="hubhint">Add the <b>crm.objects.deals.read</b> scope to the HubSpot private app (Settings → Integrations → Private Apps → Scopes), then this section will track deals created, Sales→AM pipeline movement and lead→deal TAT.</p></div>
   </section>
 </div>
+<div id="hubModal" class="hubmodal" style="display:none">
+  <div class="hubmbox">
+    <div class="hubmhead"><b id="hubModalTitle"></b><button id="hubModalClose" class="hubbtn">✕</button></div>
+    <div id="hubModalBody" class="hubmbody"></div>
+  </div>
+</div>
 </div>
 <script>
 (function(){
@@ -2151,7 +2165,8 @@ function authorized(){return SALES_LC.indexOf(authName())>=0;}
 const $=function(id){return document.getElementById(id);};
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PAGECAP=40,LIMIT=200;
-let OWN={},AGSEL=new Set(),HCON=[],HCALL=[],GRAN='month',HSTART=false,hubChart=null;
+let OWN={},AGSEL=new Set(),HCON=[],HCALL=[],GRAN='month',HSTART=false,hubChart=null,HUBPID='',HUBDOM='app.hubspot.com',CNAME={};
+function hubUrl(id){return 'https://'+HUBDOM+'/contacts/'+HUBPID+'/record/0-1/'+id;}
 function fmt(n){return new Intl.NumberFormat('en-IN').format(Math.round(Number(n)||0));}
 async function hc(op,args){const r=await window.cowork.callMcpTool(HS+'__'+op,args||{});if(r&&r.isError)throw new Error((r.content&&r.content[0]&&r.content[0].text)||'HubSpot error');return (r&&r.structuredContent)||r;}
 function setStatus(m){if($('hubStatus'))$('hubStatus').textContent=m||'';}
@@ -2201,8 +2216,9 @@ async function load(){
   $('hubRefresh').disabled=true;
   try{
     if(!Object.keys(OWN).length){const o=await hc('search_owners',{});(o.owners||[]).forEach(w=>{const nm=w.name||w.email||('Owner '+w.ownerId);if(SALES_LC.indexOf(String(nm).trim().toLowerCase())>=0)OWN[String(w.ownerId)]=nm;});SALES_IDS=Object.keys(OWN);buildAgents();}
-    const c=await fetchAll('contacts','createdate',[],['createdate','hubspot_owner_id','hs_lead_status']);
-    HCON=c.rows.map(x=>({id:x.id,t:Date.parse(x.properties.createdate)||0,own:String(x.properties.hubspot_owner_id||''),st:x.properties.hs_lead_status||''}));
+    if(!HUBPID){try{const a=await hc('account_info',{});HUBPID=String(a.portalId||'');if(a.uiDomain)HUBDOM=a.uiDomain;}catch(e){}}
+    const c=await fetchAll('contacts','createdate',[],['createdate','hubspot_owner_id','hs_lead_status','firstname','lastname','email']);
+    HCON=c.rows.map(function(x){const p=x.properties;const nm=((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||('Contact '+x.id);CNAME[x.id]={nm:nm,em:p.email||''};return {id:x.id,t:Date.parse(p.createdate)||0,own:String(p.hubspot_owner_id||''),st:p.hs_lead_status||'',nm:nm,em:p.email||''};});
     const k=await fetchAll('calls','hs_timestamp',[{propertyName:'hs_call_direction',operator:'EQ',value:'OUTBOUND'}],['hs_timestamp','hs_call_disposition','hs_call_direction','hubspot_owner_id']);
     HCALL=k.rows.map(x=>({id:x.id,t:Date.parse(x.properties.hs_timestamp)||0,own:String(x.properties.hubspot_owner_id||''),disp:x.properties.hs_call_disposition||''}));
     await attachContacts(HCALL);
@@ -2222,8 +2238,9 @@ function render(){
   const attempts=cal.length;
   const connected=cal.filter(c=>c.disp===CONNECTED).length;
   const rate=assigned?Math.round(100*contacted/assigned):0;
-  const kpis=[['Leads assigned',fmt(assigned),'created in period'],['Leads contacted',fmt(contacted),'≥1 call logged'],['Contact rate',rate+'%','contacted ÷ assigned'],['Total attempts',fmt(attempts),'outbound calls'],['Avg attempts / contacted',contacted?(attempts/contacted).toFixed(1):'0','calls per lead'],['Connected',fmt(connected),'reached']];
-  $('hubKpis').innerHTML=kpis.map(x=>'<div class="hk"><div class="l">'+x[0]+'</div><div class="v">'+x[1]+'</div><div class="s">'+x[2]+'</div></div>').join('');
+  const kpis=[['Leads assigned',fmt(assigned),'created in period · click to view','assigned'],['Leads contacted',fmt(contacted),'≥1 call logged · click to view','contacted'],['Contact rate',rate+'%','contacted ÷ assigned',''],['Total attempts',fmt(attempts),'outbound calls',''],['Avg attempts / contacted',contacted?(attempts/contacted).toFixed(1):'0','calls per lead',''],['Connected',fmt(connected),'reached','']];
+  $('hubKpis').innerHTML=kpis.map(x=>'<div class="hk'+(x[3]?' clk" data-drill="'+x[3]+'"':'"')+'><div class="l">'+x[0]+'</div><div class="v">'+x[1]+'</div><div class="s">'+x[2]+'</div></div>').join('');
+  $('hubKpis').querySelectorAll('.hk[data-drill]').forEach(function(el){el.onclick=function(){openLeadDrill(el.getAttribute('data-drill'));};});
   // outcomes
   const oc={};cal.forEach(c=>{const k=DISP[c.disp]||'(none)';oc[k]=(oc[k]||0)+1;});
   const ocArr=Object.keys(oc).map(k=>[k,oc[k]]).sort((a,b)=>b[1]-a[1]);const ocMax=Math.max(1,...ocArr.map(x=>x[1]));
@@ -2250,6 +2267,22 @@ function render(){
     hubChart=new Chart($('hubTrendChart'),{type:'bar',data:{labels:labels,datasets:[{label:'Assigned',data:aData,backgroundColor:'#3b82f6',borderRadius:4},{label:'Contacted',data:cData,backgroundColor:'#0d9488',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:12,font:{size:11}}}},scales:{y:{beginAtZero:true,ticks:{font:{size:11}}},x:{ticks:{font:{size:10}}}}}});}
   $('hubNote').textContent='Leads assigned = contacts created in the selected period (by their owner). Contacted = distinct leads with ≥1 outbound call logged. Attempts = outbound calls. Calls are attributed to the agent who made them.';
 }
+async function openLeadDrill(kind){
+  $('hubModalTitle').textContent=(kind==='assigned'?'Leads assigned':'Leads contacted')+' — loading…';
+  $('hubModalBody').innerHTML='<div class="hubhint" style="padding:14px">Loading…</div>';$('hubModal').style.display='flex';
+  let leads=[];
+  if(kind==='assigned'){
+    leads=HCON.filter(c=>agPass(c.own)).slice().sort((a,b)=>b.t-a.t).map(c=>({id:c.id,nm:c.nm,em:c.em}));
+  }else{
+    const set={};HCALL.filter(c=>agPass(c.own)).forEach(c=>{if(c._cid)set[c._cid]=1;});
+    const ids=Object.keys(set);const missing=ids.filter(id=>!CNAME[id]);
+    for(let i=0;i<missing.length;i+=100){try{const d=await hc('batch_read',{objectType:'contacts',properties:['firstname','lastname','email'],ids:missing.slice(i,i+100)});(d.results||[]).forEach(x=>{const p=x.properties;CNAME[x.id]={nm:((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||('Contact '+x.id),em:p.email||''};});}catch(e){}}
+    leads=ids.map(id=>({id:id,nm:(CNAME[id]&&CNAME[id].nm)||('Contact '+id),em:(CNAME[id]&&CNAME[id].em)||''})).sort((a,b)=>a.nm.localeCompare(b.nm));
+  }
+  const rows=leads.map(l=>'<tr><td style="text-align:left">'+esc(l.nm)+'</td><td style="text-align:left">'+esc(l.em||'')+'</td><td><a href="'+hubUrl(l.id)+'" target="_blank" rel="noopener" class="hublink">Open in HubSpot ↗</a></td></tr>').join('');
+  $('hubModalTitle').textContent=(kind==='assigned'?'Leads assigned':'Leads contacted')+' · '+leads.length;
+  $('hubModalBody').innerHTML=leads.length?('<table><thead><tr><th style="text-align:left">Lead</th><th style="text-align:left">Email</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'):'<div class="hubhint" style="padding:14px">No leads for this selection.</div>';
+}
 function buildAgents(){const box=$('hubAgList');if(!box)return;const ids=Object.keys(OWN).sort((a,b)=>OWN[a].localeCompare(OWN[b]));
   box.innerHTML=ids.map(id=>'<label><input type="checkbox" value="'+id+'"'+(AGSEL.has(id)?' checked':'')+'> '+OWN[id]+'</label>').join('');
   box.querySelectorAll('input').forEach(c=>c.onchange=function(){if(c.checked)AGSEL.add(c.value);else AGSEL.delete(c.value);$('hubAgBtn').textContent=(AGSEL.size?AGSEL.size+' agent(s)':'All agents')+' ▾';render();});}
@@ -2264,6 +2297,9 @@ function init(){
   // Trend granularity drives the period options: Day -> today/yesterday/this week/last week; Month -> month ranges.
   $('hubGran').querySelectorAll('button').forEach(b=>b.onclick=function(){GRAN=b.getAttribute('data-g');$('hubGran').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');setPeriodOptions(GRAN);load();});
   document.querySelectorAll('#view-hubspot .hubtab').forEach(b=>b.onclick=function(){document.querySelectorAll('#view-hubspot .hubtab').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.querySelectorAll('#view-hubspot .hsec').forEach(s=>s.classList.toggle('on',s.id==='hsec-'+b.getAttribute('data-hsec')));});
+  $('hubModalClose').onclick=function(){$('hubModal').style.display='none';};
+  $('hubModal').onclick=function(e){if(e.target===$('hubModal'))$('hubModal').style.display='none';};
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('hubModal'))$('hubModal').style.display='none';});
   setPeriodOptions(GRAN);
   applyAccess();setTimeout(applyAccess,1800);setTimeout(applyAccess,4000);
   window.__hubOnShow=function(){

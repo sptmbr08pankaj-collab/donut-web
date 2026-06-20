@@ -221,6 +221,19 @@ async function hubspot(op, args, sessionUser) {
     if (!r.ok) throw new Error((d && d.message) || ("HubSpot " + r.status));
     return d;
   }
+  if (op === "batch_read") {
+    const ot = args.objectType || "contacts";
+    const r = await fetch(`https://api.hubapi.com/crm/v3/objects/${ot}/batch/read`, { method: "POST", headers: hsHeaders(), body: JSON.stringify({ properties: args.properties || [], inputs: (args.ids || []).map((id) => ({ id: String(id) })) }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d && d.message) || ("HubSpot " + r.status));
+    return d;
+  }
+  if (op === "account_info") {
+    const r = await fetch("https://api.hubapi.com/account-info/v3/details", { headers: hsHeaders() });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d && d.message) || ("HubSpot " + r.status));
+    return d;
+  }
   if (op === "assoc_batch") {
     // Batch-read associations (e.g., calls -> contacts) to attribute calls to leads.
     const from = args.fromType || "calls", to = args.toType || "contacts";
