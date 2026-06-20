@@ -165,6 +165,16 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
 #view-dashboard .iconbtn{position:relative;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);display:grid;place-content:center;cursor:pointer}
 #view-dashboard .iconbtn:hover{color:var(--ink)}
 #view-dashboard .iconbtn .reddot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:#ef4444}
+#view-dashboard .notifdd{position:relative;display:inline-block}
+#view-dashboard .notifbadge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;display:grid;place-content:center;border:2px solid var(--card)}
+#view-dashboard .notifpanel{position:absolute;right:0;top:calc(100% + 6px);z-index:80;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.18);width:330px;max-height:400px;overflow:auto}
+#view-dashboard .notifpanel .nhd{padding:11px 14px;font-weight:700;font-size:13px;color:var(--ink);border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card)}
+#view-dashboard .notif{display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);align-items:flex-start}
+#view-dashboard .notif.fresh{background:rgba(5,150,105,.07)}
+#view-dashboard .notif .ni{width:32px;height:32px;border-radius:8px;background:rgba(5,150,105,.14);color:#059669;display:grid;place-content:center;flex:none;font-weight:700}
+#view-dashboard .notif .nt{font-size:13px;font-weight:600;color:var(--ink)}
+#view-dashboard .notif .nm{font-size:12px;color:var(--muted);margin-top:1px}
+#view-dashboard .notif .na{margin-left:auto;font-size:13px;font-weight:700;color:#059669;white-space:nowrap}
 #view-dashboard .dsec{display:none}#view-dashboard .dsec.active{display:block}#view-dashboard .dsec>h2:first-child{margin-top:0}#view-dashboard .kpi[data-metric]{cursor:pointer}#view-dashboard #pocTable tbody tr[data-poc]{cursor:pointer}#view-dashboard #pocTable tbody tr[data-poc]:hover td{background:rgba(59,130,246,.07)}#view-dashboard .rk-poc{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}#view-dashboard .rk-poc:hover{color:#2563eb}
 #view-dashboard .drill-ov{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}
 #view-dashboard .drill-box{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:920px;width:100%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
@@ -373,7 +383,10 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
     </div>
     <div class="hactions">
       <button class="iconbtn" id="dashRebuild" title="Re-scan quotation details from Zoho" aria-label="Refresh"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
-      <button class="iconbtn" title="Notifications" aria-label="Notifications"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="reddot"></span></button>
+      <span class="notifdd">
+        <button class="iconbtn" id="notifBtn" title="Payments received" aria-label="Payments received notifications"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="notifbadge" id="notifBadge" style="display:none">0</span></button>
+        <div id="notifPanel" class="notifpanel" style="display:none"><div class="nhd">Payments received</div><div id="notifList"></div></div>
+      </span>
       <button class="iconbtn" id="themeToggle" title="Toggle dark mode" aria-label="Toggle dark mode"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
       <button class="iconbtn" title="Account" aria-label="Account"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></svg></button>
     </div>
@@ -1868,6 +1881,22 @@ async function loadPayments(){
   }
   PAY=all;
 }
+/* ---------- Payment notifications (payment-link + manually-added payments) ---------- */
+function notifNum(p){return parseInt(String(p&&p.payment_number||'').replace(/\D/g,''),10)||0;}
+function payMode(p){if(p&&p.gateway_transaction_id)return 'Payment link';const m=String(p&&p.mode||'').toLowerCase();
+  return ({banktransfer:'Bank transfer',bank_transfer:'Bank transfer',cash:'Cash',check:'Cheque',cheque:'Cheque',creditcard:'Card',card:'Card',upi:'UPI / QR',paypal:'PayPal',stripe:'Card',others:'Other',other:'Other'})[m]||(p&&p.mode?p.mode:'Payment');}
+function notifSeen(){return parseInt(localStorage.getItem('donut_notif_seen')||'0',10)||0;}
+function buildNotifs(){
+  const list=PAY.slice().sort((a,b)=>{const d=String(b.date||'').localeCompare(String(a.date||''));return d!==0?d:notifNum(b)-notifNum(a);});
+  const seen=notifSeen();
+  const fresh=PAY.filter(p=>notifNum(p)>seen).length;
+  const badge=$('notifBadge');if(badge){if(fresh>0){badge.textContent=fresh>99?'99+':String(fresh);badge.style.display='';}else badge.style.display='none';}
+  const box=$('notifList');if(!box)return;
+  box.innerHTML=list.slice(0,50).map(function(p){const isNew=notifNum(p)>seen;const amt=Number(p.amount)||0;
+    return '<div class="notif'+(isNew?' fresh':'')+'"><div class="ni">₹</div><div><div class="nt">'+esc(p.customer_name||'Customer')+'</div><div class="nm">'+esc(String(p.date||'').slice(0,10))+' · '+esc(payMode(p))+(p.invoice_number?(' · '+esc(p.invoice_number)):'')+'</div></div><div class="na">'+fmtINR(amt)+'</div></div>';}).join('')
+    ||'<div class="notif"><div class="nm">No payments received yet.</div></div>';
+}
+function markNotifsSeen(){let mx=0;PAY.forEach(p=>{const n=notifNum(p);if(n>mx)mx=n;});localStorage.setItem('donut_notif_seen',String(mx));const b=$('notifBadge');if(b)b.style.display='none';}
 function invPoc(v){return canonPoc(String(v.salesperson_name||'').trim()||String(v.created_by||'').trim());}
 function invDate(v){return String(v.invoice_date||v.date||v.due_date||v.created_time||'').slice(0,10);}
 function dueTable(){
@@ -1920,7 +1949,7 @@ async function build(force){
     if(!SUM.length)await loadSummaries();
     buildPocChips();render();
     if(!INV.length||force)await loadInvoices();
-    if(!PAY.length||force)await loadPayments();render();
+    if(!PAY.length||force)await loadPayments();buildNotifs();render();
     await ensureDetails();render();
     setStatus('Updated '+new Date().toLocaleString());
   }catch(e){setStatus('⚠ '+e.message);}
@@ -1944,6 +1973,9 @@ function init(){
   $('fFrom').addEventListener('change',function(){if($('fFrom').value&&!$('fTo').value){try{$('fTo').focus();if($('fTo').showPicker)$('fTo').showPicker();}catch(e){}}applyDates();});
   $('fTo').addEventListener('change',applyDates);
   // POC dropdown (multi-select checkboxes + Apply).
+  // Payment notifications bell
+  $('notifBtn').onclick=function(e){e.stopPropagation();var p=$('notifPanel');const opening=(p.style.display==='none');p.style.display=opening?'':'none';if(opening){buildNotifs();markNotifsSeen();}};
+  document.addEventListener('click',function(e){var p=$('notifPanel');if(p&&p.style.display!=='none'&&!(e.target.closest&&e.target.closest('.notifdd')))p.style.display='none';});
   $('pocBtn').onclick=function(e){e.stopPropagation();var m=$('pocMenu');m.style.display=(m.style.display==='none')?'':'none';};
   document.addEventListener('click',function(e){var m=$('pocMenu');if(m&&m.style.display!=='none'&&!(e.target.closest&&e.target.closest('.pocdd')))m.style.display='none';});
   $('pocApply').onclick=function(){POCSEL.clear();$('pocMenuList').querySelectorAll('input[type=checkbox]:checked').forEach(function(c){POCSEL.add(c.value);});updatePocClear();$('pocMenu').style.display='none';if(SUM.length)render();};
