@@ -1963,7 +1963,7 @@ function dueTable(){
   const partial=rows.filter(v=>(Number(v.balance)||0)<(Number(v.total)||0)).length;
   $('dueCards').innerHTML=[['Outstanding due',fmtINR(totDue),rows.length+' open invoices'],['Invoiced (open)',fmtINR(totInv),'gross billed'],['Partially paid',String(partial),'of '+rows.length+' open']]
     .map(x=>'<div class="kpi"><div class="l">'+esc(x[0])+'</div><div class="v">'+esc(x[1])+'</div><div class="s">'+esc(x[2])+'</div></div>').join('');
-  $('dueTable').querySelector('thead').innerHTML='<tr><th>Client</th><th>POC</th><th>Invoice</th><th>Date</th><th>Invoiced ₹</th><th>Received ₹</th><th>Due ₹</th><th>Status</th></tr>';
+  $('dueTable').querySelector('thead').innerHTML='<tr><th>Client</th><th style="text-align:left">POC</th><th style="text-align:left">Invoice</th><th style="text-align:left">Date</th><th>Invoiced ₹</th><th>Received ₹</th><th>Due ₹</th><th>Status</th></tr>';
   const maxDue=Math.max(1,...rows.map(v=>Number(v.balance)||0));
   $('dueTable').querySelector('tbody').innerHTML=rows.slice(0,200).map(v=>{const tot=Number(v.total)||0,bal=Number(v.balance)||0,rec=tot-bal,st=String(v.status||'').toLowerCase();
     const badge=st==='partially_paid'?'Partially paid':(st==='overdue'?'Overdue':(st==='sent'?'Unpaid':(st==='viewed'?'Unpaid (viewed)':st)));
