@@ -2222,8 +2222,8 @@ async function load(){
   try{
     if(!Object.keys(OWN).length){const o=await hc('search_owners',{});(o.owners||[]).forEach(w=>{const nm=w.name||w.email||('Owner '+w.ownerId);if(SALES_LC.indexOf(String(nm).trim().toLowerCase())>=0)OWN[String(w.ownerId)]=nm;});SALES_IDS=Object.keys(OWN);buildAgents();}
     if(!HUBPID){try{const a=await hc('account_info',{});HUBPID=String(a.portalId||'');if(a.uiDomain)HUBDOM=a.uiDomain;}catch(e){}}
-    const c=await fetchAll('contacts','createdate',[],['createdate','hubspot_owner_id','hs_lead_status','firstname','lastname','email']);
-    HCON=c.rows.map(function(x){const p=x.properties;const nm=((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||('Contact '+x.id);CNAME[x.id]={nm:nm,em:p.email||''};return {id:x.id,t:Date.parse(p.createdate)||0,own:String(p.hubspot_owner_id||''),st:p.hs_lead_status||'',nm:nm,em:p.email||''};});
+    const c=await fetchAll('contacts','hubspot_owner_assigneddate',[],['hubspot_owner_assigneddate','hubspot_owner_id','hs_lead_status','firstname','lastname','email']);
+    HCON=c.rows.map(function(x){const p=x.properties;const nm=((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||('Contact '+x.id);CNAME[x.id]={nm:nm,em:p.email||''};return {id:x.id,t:Date.parse(p.hubspot_owner_assigneddate)||0,own:String(p.hubspot_owner_id||''),st:p.hs_lead_status||'',nm:nm,em:p.email||''};});
     const k=await fetchAll('calls','hs_timestamp',[{propertyName:'hs_call_direction',operator:'EQ',value:'OUTBOUND'}],['hs_timestamp','hs_call_disposition','hs_call_direction','hubspot_owner_id']);
     HCALL=k.rows.map(x=>({id:x.id,t:Date.parse(x.properties.hs_timestamp)||0,own:String(x.properties.hubspot_owner_id||''),disp:x.properties.hs_call_disposition||''}));
     await attachContacts(HCALL);
@@ -2270,7 +2270,7 @@ function render(){
   $('hubTrendScope').textContent='· '+keys.length+' '+(GRAN==='day'?'days':'months');
   if(typeof Chart!=='undefined'){if(hubChart){try{hubChart.destroy();}catch(e){}}
     hubChart=new Chart($('hubTrendChart'),{type:'bar',data:{labels:labels,datasets:[{label:'Assigned',data:aData,backgroundColor:'#3b82f6',borderRadius:4},{label:'Contacted',data:cData,backgroundColor:'#0d9488',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:12,font:{size:11}}}},scales:{y:{beginAtZero:true,ticks:{font:{size:11}}},x:{ticks:{font:{size:10}}}}}});}
-  $('hubNote').textContent='Leads assigned = contacts created in the selected period (by their owner). Contacted = distinct leads with ≥1 outbound call logged. Attempts = outbound calls. Calls are attributed to the agent who made them.';
+  $('hubNote').textContent='Leads assigned = leads assigned to the POC in the period (by HubSpot owner-assigned date, not lead create date). Contacted = distinct leads with ≥1 outbound call logged. Attempts = outbound calls. Calls are attributed to the agent who made them.';
 }
 async function openLeadDrill(kind){
   $('hubModalTitle').textContent=(kind==='assigned'?'Leads assigned':'Leads contacted')+' — loading…';
