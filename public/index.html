@@ -2172,6 +2172,7 @@ const PAGECAP=40,LIMIT=200;
 let OWN={},AGSEL=new Set(),HCON=[],HCALL=[],GRAN='month',HSTART=false,hubChart=null,HUBPID='',HUBDOM='app.hubspot.com',CNAME={};
 function hubUrl(id){return 'https://'+HUBDOM+'/contacts/'+HUBPID+'/record/0-1/'+id;}
 function fmt(n){return new Intl.NumberFormat('en-IN').format(Math.round(Number(n)||0));}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 async function hc(op,args){const r=await window.cowork.callMcpTool(HS+'__'+op,args||{});if(r&&r.isError)throw new Error((r.content&&r.content[0]&&r.content[0].text)||'HubSpot error');return (r&&r.structuredContent)||r;}
 function setStatus(m){if($('hubStatus'))$('hubStatus').textContent=m||'';}
 function sod(d){d=new Date(d);d.setHours(0,0,0,0);return d;}
@@ -2274,18 +2275,20 @@ function render(){
 async function openLeadDrill(kind){
   $('hubModalTitle').textContent=(kind==='assigned'?'Leads assigned':'Leads contacted')+' — loading…';
   $('hubModalBody').innerHTML='<div class="hubhint" style="padding:14px">Loading…</div>';$('hubModal').style.display='flex';
-  let leads=[];
-  if(kind==='assigned'){
-    leads=HCON.filter(c=>agPass(c.own)).slice().sort((a,b)=>b.t-a.t).map(c=>({id:c.id,nm:c.nm,em:c.em}));
-  }else{
-    const set={};HCALL.filter(c=>agPass(c.own)).forEach(c=>{if(c._cid)set[c._cid]=1;});
-    const ids=Object.keys(set);const missing=ids.filter(id=>!CNAME[id]);
-    for(let i=0;i<missing.length;i+=100){try{const d=await hc('batch_read',{objectType:'contacts',properties:['firstname','lastname','email'],ids:missing.slice(i,i+100)});(d.results||[]).forEach(x=>{const p=x.properties;CNAME[x.id]={nm:((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||('Contact '+x.id),em:p.email||''};});}catch(e){}}
-    leads=ids.map(id=>({id:id,nm:(CNAME[id]&&CNAME[id].nm)||('Contact '+id),em:(CNAME[id]&&CNAME[id].em)||''})).sort((a,b)=>a.nm.localeCompare(b.nm));
-  }
-  const rows=leads.map(l=>'<tr><td style="text-align:left">'+esc(l.nm)+'</td><td style="text-align:left">'+esc(l.em||'')+'</td><td><a href="'+hubUrl(l.id)+'" target="_blank" rel="noopener" class="hublink">Open in HubSpot ↗</a></td></tr>').join('');
-  $('hubModalTitle').textContent=(kind==='assigned'?'Leads assigned':'Leads contacted')+' · '+leads.length;
-  $('hubModalBody').innerHTML=leads.length?('<table><thead><tr><th style="text-align:left">Lead</th><th style="text-align:left">Email</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'):'<div class="hubhint" style="padding:14px">No leads for this selection.</div>';
+  try{
+    let leads=[];
+    if(kind==='assigned'){
+      leads=HCON.filter(c=>agPass(c.own)).slice().sort((a,b)=>b.t-a.t).map(c=>({id:c.id,nm:c.nm,em:c.em}));
+    }else{
+      const set={};HCALL.filter(c=>agPass(c.own)).forEach(c=>{if(c._cid)set[c._cid]=1;});
+      const ids=Object.keys(set);const missing=ids.filter(id=>!CNAME[id]);
+      for(let i=0;i<missing.length;i+=100){try{const d=await hc('batch_read',{objectType:'contacts',properties:['firstname','lastname','email'],ids:missing.slice(i,i+100)});(d.results||[]).forEach(x=>{const p=x.properties;CNAME[x.id]={nm:((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||('Contact '+x.id),em:p.email||''};});}catch(e){}}
+      leads=ids.map(id=>({id:id,nm:(CNAME[id]&&CNAME[id].nm)||('Contact '+id),em:(CNAME[id]&&CNAME[id].em)||''})).sort((a,b)=>a.nm.localeCompare(b.nm));
+    }
+    const rows=leads.map(l=>'<tr><td style="text-align:left">'+esc(l.nm)+'</td><td style="text-align:left">'+esc(l.em||'')+'</td><td><a href="'+hubUrl(l.id)+'" target="_blank" rel="noopener" class="hublink">Open in HubSpot ↗</a></td></tr>').join('');
+    $('hubModalTitle').textContent=(kind==='assigned'?'Leads assigned':'Leads contacted')+' · '+leads.length;
+    $('hubModalBody').innerHTML=leads.length?('<table><thead><tr><th style="text-align:left">Lead</th><th style="text-align:left">Email</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>'):'<div class="hubhint" style="padding:14px">No leads for this selection.</div>';
+  }catch(e){$('hubModalBody').innerHTML='<div class="hubhint" style="padding:14px;color:var(--danger)">Could not load leads: '+esc(e.message||e)+'</div>';}
 }
 function buildAgents(){const box=$('hubAgList');if(!box)return;const ids=Object.keys(OWN).sort((a,b)=>OWN[a].localeCompare(OWN[b]));
   box.innerHTML=ids.map(id=>'<label><input type="checkbox" value="'+id+'"'+(AGSEL.has(id)?' checked':'')+'> '+OWN[id]+'</label>').join('');
