@@ -1938,17 +1938,14 @@ function pocTable(){
   const cols=[['name','POC'],['count','Quotes'],['quoted','Quoted ₹'],['accepted','Accepted ₹'],['realized','Realized ₹'],['outstanding','Outstanding ₹'],['aov','AOV ₹'],['custA','Customers'],['disc','Discount ₹'],['avgDisc','Avg disc %']];
   const rows=POCS.slice().sort((a,b)=>{const k=SORT.key,va=a[k],vb=b[k];if(typeof va==='string')return SORT.dir*va.localeCompare(vb);return SORT.dir*(va-vb);});
   const maxAcc=Math.max(1,...rows.map(r=>r.accepted));
-  $('pocTable').querySelector('thead').innerHTML='<tr>'+cols.map(c=>'<th data-k="'+c[0]+'">'+c[1]+(SORT.key===c[0]?(SORT.dir<0?' ▾':' ▴'):'')+'</th>').join('')+'<th>Next billing</th><th>Adjust</th></tr>';
+  $('pocTable').querySelector('thead').innerHTML='<tr>'+cols.map(c=>'<th data-k="'+c[0]+'">'+c[1]+(SORT.key===c[0]?(SORT.dir<0?' ▾':' ▴'):'')+'</th>').join('')+'</tr>';
   $('pocTable').querySelector('tbody').innerHTML=rows.map(function(r){var me=window.__DONUT_POC&&String(r.name||'').trim().toLowerCase()===String(window.__DONUT_POC).trim().toLowerCase();
-    const a=adjOf(r.name);const outv=effOutstanding(r);const manual=hasAdjAmt(a);
     return '<tr data-poc="'+esc(r.name)+'"'+(me?' style="background:#eaf2ff;font-weight:600"':'')+'><td>'+(me?'★ ':'')+esc(r.name)+'</td><td>'+r.count+'</td><td>'+fmtINR(r.quoted)+'</td>'+
     '<td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*r.accepted/maxAcc)+'px"></span><span>'+fmtINR(r.accepted)+'</span></div></td>'+
-    '<td>'+fmtINR(r.realized)+'</td><td data-outpoc="'+esc(r.name)+'" title="'+(a.comment?esc(a.comment)+' · ':'')+'Click to see the due invoices" style="cursor:pointer;text-decoration:underline dotted;'+(outv>0?'color:var(--danger);font-weight:600':'')+'">'+fmtINR(outv)+(manual?' <span style="color:var(--accent)">✎</span>':'')+'</td>'+
-    '<td>'+fmtINR(r.aov)+'</td><td>'+r.custA+'</td><td>'+fmtINR(r.disc)+'</td><td>'+(r.discCount?r.avgDisc.toFixed(1)+'%':'—')+'</td>'+
-    '<td style="text-align:left">'+esc(a.nextDate||'—')+'</td><td><button class="ghost" data-adj="'+esc(r.name)+'" style="padding:2px 9px;font-size:12px">Adjust</button></td></tr>';}).join('')||'<tr><td colspan="12" class="empty">No quotations in this period</td></tr>';
+    '<td>'+fmtINR(r.realized)+'</td><td data-outpoc="'+esc(r.name)+'" title="Click to see the due invoices" style="cursor:pointer;text-decoration:underline dotted;'+(r.outstanding>0?'color:var(--danger);font-weight:600':'')+'">'+fmtINR(r.outstanding)+'</td>'+
+    '<td>'+fmtINR(r.aov)+'</td><td>'+r.custA+'</td><td>'+fmtINR(r.disc)+'</td><td>'+(r.discCount?r.avgDisc.toFixed(1)+'%':'—')+'</td></tr>';}).join('')||'<tr><td colspan="10" class="empty">No quotations in this period</td></tr>';
   $('pocTable').querySelector('thead').querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(SORT.key===k)SORT.dir*=-1;else{SORT.key=k;SORT.dir=-1;}pocTable();});
   $('pocTable').querySelectorAll('td[data-outpoc]').forEach(td=>td.onclick=function(e){e.stopPropagation();openOutDrill(td.getAttribute('data-outpoc'));});
-  $('pocTable').querySelectorAll('button[data-adj]').forEach(b=>b.onclick=function(e){e.stopPropagation();const poc=b.getAttribute('data-adj');const r=POCS.find(p=>p.name===poc);openAdjust(poc,poc,r?r.outstanding:0);});
   $('pocTable').querySelectorAll('tbody tr[data-poc]').forEach(tr=>tr.onclick=()=>openDrill('count',tr.getAttribute('data-poc')));}
 function adjLabel(key){return String(key).indexOf('inv:')===0?('Invoice '+String(key).slice(4)):key;}
 function openAdjust(key,label,defAmt){const a=adjOf(key);
