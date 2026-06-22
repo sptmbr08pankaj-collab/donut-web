@@ -1943,30 +1943,41 @@ function pocTable(){
     const a=adjOf(r.name);const outv=effOutstanding(r);const manual=hasAdjAmt(a);
     return '<tr data-poc="'+esc(r.name)+'"'+(me?' style="background:#eaf2ff;font-weight:600"':'')+'><td>'+(me?'★ ':'')+esc(r.name)+'</td><td>'+r.count+'</td><td>'+fmtINR(r.quoted)+'</td>'+
     '<td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*r.accepted/maxAcc)+'px"></span><span>'+fmtINR(r.accepted)+'</span></div></td>'+
-    '<td>'+fmtINR(r.realized)+'</td><td'+(outv>0?' style="color:var(--danger);font-weight:600"':'')+(a.comment?(' title="'+esc(a.comment)+'"'):'')+'>'+fmtINR(outv)+(manual?' <span style="color:var(--accent)" title="Manually adjusted (local)">✎</span>':'')+'</td>'+
+    '<td>'+fmtINR(r.realized)+'</td><td data-outpoc="'+esc(r.name)+'" title="'+(a.comment?esc(a.comment)+' · ':'')+'Click to see the due invoices" style="cursor:pointer;text-decoration:underline dotted;'+(outv>0?'color:var(--danger);font-weight:600':'')+'">'+fmtINR(outv)+(manual?' <span style="color:var(--accent)">✎</span>':'')+'</td>'+
     '<td>'+fmtINR(r.aov)+'</td><td>'+r.custA+'</td><td>'+fmtINR(r.disc)+'</td><td>'+(r.discCount?r.avgDisc.toFixed(1)+'%':'—')+'</td>'+
     '<td style="text-align:left">'+esc(a.nextDate||'—')+'</td><td><button class="ghost" data-adj="'+esc(r.name)+'" style="padding:2px 9px;font-size:12px">Adjust</button></td></tr>';}).join('')||'<tr><td colspan="12" class="empty">No quotations in this period</td></tr>';
   $('pocTable').querySelector('thead').querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(SORT.key===k)SORT.dir*=-1;else{SORT.key=k;SORT.dir=-1;}pocTable();});
-  $('pocTable').querySelectorAll('button[data-adj]').forEach(b=>b.onclick=function(e){e.stopPropagation();openAdjust(b.getAttribute('data-adj'));});
+  $('pocTable').querySelectorAll('td[data-outpoc]').forEach(td=>td.onclick=function(e){e.stopPropagation();openOutDrill(td.getAttribute('data-outpoc'));});
+  $('pocTable').querySelectorAll('button[data-adj]').forEach(b=>b.onclick=function(e){e.stopPropagation();const poc=b.getAttribute('data-adj');const r=POCS.find(p=>p.name===poc);openAdjust(poc,poc,r?r.outstanding:0);});
   $('pocTable').querySelectorAll('tbody tr[data-poc]').forEach(tr=>tr.onclick=()=>openDrill('count',tr.getAttribute('data-poc')));}
-function openAdjust(poc){const a=adjOf(poc),r=POCS.find(p=>p.name===poc);
-  $('adjTitle').textContent='Adjust outstanding — '+poc;
-  $('adjAmount').value=hasAdjAmt(a)?a.amount:(r?Math.round(r.outstanding):'');
+function adjLabel(key){return String(key).indexOf('inv:')===0?('Invoice '+String(key).slice(4)):key;}
+function openAdjust(key,label,defAmt){const a=adjOf(key);
+  $('adjTitle').textContent='Adjust outstanding — '+(label||adjLabel(key));
+  $('adjAmount').value=hasAdjAmt(a)?a.amount:(defAmt!=null&&defAmt!==''?Math.round(defAmt):'');
   $('adjDate').value=a.nextDate||'';$('adjComment').value=a.comment||'';
-  $('adjModal').setAttribute('data-poc',poc);$('adjModal').style.display='flex';}
+  $('adjModal').setAttribute('data-poc',key);$('adjModal').style.display='flex';}
 function saveAdjust(){const poc=$('adjModal').getAttribute('data-poc');if(!poc)return;
   const amt=$('adjAmount').value,date=$('adjDate').value,c=$('adjComment').value;
   if(amt===''&&!date&&!c.trim())delete OUTADJ[poc];else OUTADJ[poc]={amount:amt===''?'':Number(amt),nextDate:date,comment:c};
   saveOutAdj();$('adjModal').style.display='none';render();}
 function resetAdjust(){const poc=$('adjModal').getAttribute('data-poc');if(poc){delete OUTADJ[poc];saveOutAdj();}$('adjModal').style.display='none';render();}
+function openOutDrill(poc){
+  const list=INV.filter(function(v){const bal=Number(v.balance)||0,st=String(v.status||'').toLowerCase();return bal>0&&st!=='void'&&st!=='draft'&&invPoc(v)===poc;}).sort(function(a,b){return (Number(b.balance)||0)-(Number(a.balance)||0);});
+  let due=0;const rows=list.map(function(v){const tot=Number(v.total)||0,bal=Number(v.balance)||0,rec=tot-bal;due+=bal;
+    return '<tr><td style="text-align:left">'+esc(v.customer_name||'—')+'</td><td style="text-align:left">'+esc(v.invoice_number||'')+'</td><td style="text-align:left">'+esc(invDate(v))+'</td><td>'+fmtINR(tot)+'</td><td>'+fmtINR(rec)+'</td><td>'+fmtINR(bal)+'</td></tr>';}).join('');
+  const head='<tr><th style="text-align:left">Customer</th><th style="text-align:left">Invoice</th><th style="text-align:left">Date</th><th>Invoiced ₹</th><th>Received ₹</th><th>Due ₹</th></tr>';
+  const foot='<tr style="font-weight:700;border-top:2px solid var(--line)"><td style="text-align:left" colspan="5">'+list.length+' invoice(s)</td><td>'+fmtINR(due)+'</td></tr>';
+  $('drillTitle').textContent='Outstanding — '+poc;
+  $('drillBody').innerHTML=list.length?('<div class="panel" style="overflow-x:auto"><table>'+head+rows+foot+'</table></div><div class="note">Open invoices with a balance due, attributed to this POC (across all periods).</div>'):'<div class="empty">No outstanding invoices for '+esc(poc)+'.</div>';
+  $('drillModal').style.display='flex';}
 function renderAdjPanel(){const box=$('adjPanel');if(!box)return;
   const entries=Object.keys(OUTADJ).map(k=>Object.assign({poc:k},OUTADJ[k])).filter(a=>hasAdjAmt(a)||a.nextDate||(a.comment&&String(a.comment).trim()));
   if(!entries.length){box.innerHTML='';return;}
   box.innerHTML='<div class="panel" style="margin-bottom:14px;border:1px solid var(--accent)"><div style="font-weight:700;font-size:13px;margin-bottom:8px">✎ Manual outstanding adjustments <span class="hint">(local only — not synced to Zoho)</span></div>'+
-    '<table><thead><tr><th style="text-align:left">POC</th><th>Outstanding ₹</th><th style="text-align:left">Next billing</th><th style="text-align:left">Comment</th><th></th></tr></thead><tbody>'+
-    entries.map(a=>'<tr><td style="text-align:left">'+esc(a.poc)+'</td><td>'+(hasAdjAmt(a)?fmtINR(Number(a.amount)||0):'—')+'</td><td style="text-align:left">'+esc(a.nextDate||'—')+'</td><td style="text-align:left">'+esc(a.comment||'')+'</td><td><button class="ghost" data-adj2="'+esc(a.poc)+'" style="padding:2px 9px;font-size:12px">Edit</button></td></tr>').join('')+
+    '<table><thead><tr><th style="text-align:left">POC / Invoice</th><th>Outstanding ₹</th><th style="text-align:left">Next billing</th><th style="text-align:left">Comment</th><th></th></tr></thead><tbody>'+
+    entries.map(a=>'<tr><td style="text-align:left">'+esc(adjLabel(a.poc))+'</td><td>'+(hasAdjAmt(a)?fmtINR(Number(a.amount)||0):'—')+'</td><td style="text-align:left">'+esc(a.nextDate||'—')+'</td><td style="text-align:left">'+esc(a.comment||'')+'</td><td><button class="ghost" data-adj2="'+esc(a.poc)+'" style="padding:2px 9px;font-size:12px">Edit</button></td></tr>').join('')+
     '</tbody></table></div>';
-  box.querySelectorAll('button[data-adj2]').forEach(b=>b.onclick=()=>openAdjust(b.getAttribute('data-adj2')));}
+  box.querySelectorAll('button[data-adj2]').forEach(b=>b.onclick=()=>openAdjust(b.getAttribute('data-adj2'),adjLabel(b.getAttribute('data-adj2'))));}
 function itemTable(elId,arr){
   if(!arr.length){$(elId).querySelector('thead').innerHTML='';$(elId).querySelector('tbody').innerHTML='<tr><td class="empty">No items in scanned window / period</td></tr>';return;}
   const sorted=arr.slice().sort((a,b)=>b.revenue-a.revenue);const max=Math.max(1,...sorted.map(r=>r.revenue));
@@ -2055,18 +2066,22 @@ function dueTable(){
   // so partial payments (e.g. half now, half next month) keep the remainder here until cleared. Not period-bound.
   let rows=INV.filter(v=>{const bal=Number(v.balance)||0,st=String(v.status||'').toLowerCase();
     return bal>0&&st!=='void'&&st!=='draft'&&pocPass(invPoc(v));});
-  rows.sort((a,b)=>(Number(b.balance)||0)-(Number(a.balance)||0));
-  const totDue=rows.reduce((a,v)=>a+(Number(v.balance)||0),0),totInv=rows.reduce((a,v)=>a+(Number(v.total)||0),0);
+  const dueOf=v=>{const a=adjOf('inv:'+(v.invoice_number||''));return hasAdjAmt(a)?(Number(a.amount)||0):(Number(v.balance)||0);};
+  rows.sort((a,b)=>dueOf(b)-dueOf(a));
+  const totDue=rows.reduce((a,v)=>a+dueOf(v),0),totInv=rows.reduce((a,v)=>a+(Number(v.total)||0),0);
   const partial=rows.filter(v=>(Number(v.balance)||0)<(Number(v.total)||0)).length;
   $('dueCards').innerHTML=[['Outstanding due',fmtINR(totDue),rows.length+' open invoices'],['Invoiced (open)',fmtINR(totInv),'gross billed'],['Partially paid',String(partial),'of '+rows.length+' open']]
     .map(x=>'<div class="kpi"><div class="l">'+esc(x[0])+'</div><div class="v">'+esc(x[1])+'</div><div class="s">'+esc(x[2])+'</div></div>').join('');
-  $('dueTable').querySelector('thead').innerHTML='<tr><th>Client</th><th style="text-align:left">POC</th><th style="text-align:left">Invoice</th><th style="text-align:left">Date</th><th>Invoiced ₹</th><th>Received ₹</th><th>Due ₹</th><th>Status</th></tr>';
-  const maxDue=Math.max(1,...rows.map(v=>Number(v.balance)||0));
+  $('dueTable').querySelector('thead').innerHTML='<tr><th>Client</th><th style="text-align:left">POC</th><th style="text-align:left">Invoice</th><th style="text-align:left">Date</th><th>Invoiced ₹</th><th>Received ₹</th><th>Due ₹</th><th style="text-align:left">Next billing</th><th>Status</th><th>Adjust</th></tr>';
+  const maxDue=Math.max(1,...rows.map(dueOf));
   $('dueTable').querySelector('tbody').innerHTML=rows.slice(0,200).map(v=>{const tot=Number(v.total)||0,bal=Number(v.balance)||0,rec=tot-bal,st=String(v.status||'').toLowerCase();
+    const key='inv:'+(v.invoice_number||'');const adj=adjOf(key);const due=dueOf(v);const man=hasAdjAmt(adj);
     const badge=st==='partially_paid'?'Partially paid':(st==='overdue'?'Overdue':(st==='sent'?'Unpaid':(st==='viewed'?'Unpaid (viewed)':st)));
     return '<tr><td style="text-align:left">'+esc(v.customer_name||'—')+'</td><td style="text-align:left">'+esc(invPoc(v))+'</td><td style="text-align:left">'+esc(v.invoice_number||'')+'</td><td style="text-align:left">'+esc(invDate(v))+'</td><td>'+fmtINR(tot)+'</td><td>'+fmtINR(rec)+'</td>'+
-      '<td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*bal/maxDue)+'px;background:var(--danger)"></span><span><b>'+fmtINR(bal)+'</b></span></div></td><td>'+esc(badge)+'</td></tr>';}).join('')
-    ||'<tr><td colspan="8" class="empty">No outstanding balances 🎉</td></tr>';
+      '<td'+(adj.comment?(' title="'+esc(adj.comment)+'"'):'')+'><div class="barwrap"><span class="bar" style="width:'+Math.round(60*due/maxDue)+'px;background:var(--danger)"></span><span><b>'+fmtINR(due)+'</b>'+(man?' <span style="color:var(--accent)">✎</span>':'')+'</span></div></td>'+
+      '<td style="text-align:left">'+esc(adj.nextDate||'—')+'</td><td>'+esc(badge)+'</td><td><button class="ghost" data-adjinv="'+esc(key)+'" data-cust="'+esc(v.customer_name||'')+'" data-bal="'+bal+'" style="padding:2px 9px;font-size:12px">Adjust</button></td></tr>';}).join('')
+    ||'<tr><td colspan="10" class="empty">No outstanding balances 🎉</td></tr>';
+  $('dueTable').querySelectorAll('button[data-adjinv]').forEach(b=>b.onclick=function(){openAdjust(b.getAttribute('data-adjinv'),(b.getAttribute('data-cust')||'')+' · '+adjLabel(b.getAttribute('data-adjinv')),Number(b.getAttribute('data-bal'))||0);});
   renderAdjPanel();
   $('dueScope').textContent='· current open balances'+(POCSEL.size?(' · '+POCSEL.size+' POC'):'');
   $('dueNote').textContent='Accepted/invoiced quotes not yet fully paid. Due = invoiced − received (Zoho invoice balance) — partial payments keep the remainder here until cleared. Shown across all periods; filtered by selected POC. Drafts & voided excluded.';
