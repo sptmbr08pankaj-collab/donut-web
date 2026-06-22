@@ -1271,7 +1271,7 @@ async function pushToZoho(q,markSent){
   const pcCode=stateCode(q.customer.state);
   if(cid&&pcCode){try{const upd={place_of_contact:pcCode};if(q.customer.gstin){upd.gst_treatment='business_gst';upd.gst_no=q.customer.gstin;}await call(ZOHO+'__update_contact',{path_variables:{contact_id:cid},body:upd});}catch(e){}}
   const cpid=await getZohoContactPersonId(q);
-  const body={customer_id:cid,date:q.date,reference_number:String(q.number||''),notes:q.notes||'',terms:q.terms||'',line_items:lines,is_discount_before_tax:true};
+  const body={customer_id:cid,date:q.date,reference_number:String(q.number||''),notes:q.notes||'',terms:q.terms||'',line_items:lines,is_discount_before_tax:true,auto_collect:false};
   if(subscription){const term=periodOf(planLine.name,planLine.unit);body.estimate_type='new_subscription';body.interval_unit=(term==='year')?'years':'months';}
   const pc=stateCode(q.customer.state);if(pc)body.place_of_supply=pc;
   if(q.poc)body.salesperson_name=q.poc;
