@@ -209,6 +209,7 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
   </div>
   <div class="toolbtns">
     <button id="newBtn">+ New</button>
+    <button id="voiceBtn" title="Fill this quote by voice">🎤 Speak</button>
     <button id="dupBtn" class="ghost">Duplicate</button>
     <button id="saveBtn" class="primary">Save</button>
     <button id="pdfBtn">⬇ PDF</button>
@@ -219,6 +220,20 @@ table.qd td{padding:8px;border-bottom:1px solid var(--line);font-size:13px;verti
 
 <div id="priceBanner" class="banner"></div>
 <div id="statusBanner" class="banner" style="background:#ecfdf5;color:#065f46;border-color:#a7f3d0"></div>
+<div id="voiceModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:300;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border:1px solid var(--line);border-radius:14px;max-width:520px;width:100%;max-height:85vh;overflow:auto;padding:18px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><b style="font-size:15px">🎤 Voice command</b><button id="voiceClose" class="ghost" style="padding:3px 10px">✕</button></div>
+    <div id="voiceState" style="font-size:13px;color:var(--muted);margin-bottom:8px">Click “Start” and say the customer, plan, add-ons, discount, state and tax type.</div>
+    <div style="background:#f8fafc;border:1px solid var(--line);border-radius:9px;padding:10px;min-height:42px;font-size:14px" id="voiceText"></div>
+    <div id="voiceParsed" style="margin-top:12px"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button id="voiceStart" class="primary">● Start listening</button>
+      <button id="voiceApply" class="accent" disabled>Apply to quote</button>
+      <button id="voiceCancel" class="ghost">Cancel</button>
+    </div>
+    <div class="hint" style="margin-top:8px;font-size:11px;color:#94a3b8">Example: “Customer Hotel Sunrise, Connect Yearly plan, add Tally Integration Yearly, 10 percent discount, state Maharashtra, IGST”. Works best in Chrome/Edge.</div>
+  </div>
+</div>
 
 <div class="wrap">
   <!-- LEFT: builder -->
@@ -1455,6 +1470,59 @@ function duplicateQuote(){syncStateFromForm();const c=JSON.parse(JSON.stringify(
 function deleteQuote(){if(!STATE.cur.saved){newQuote();return;}if(!confirm('Delete quote '+STATE.cur.number+'?'))return;STATE.db.quotes=STATE.db.quotes.filter(x=>x.id!==STATE.cur.id);saveDB();newQuote();flash('Deleted.');}
 let flashTimer=null;
 function flash(msg,bad){const b=$('statusBanner');b.innerHTML=esc(msg).replace('&amp;','&');b.style.background=bad?'#fef2f2':'#ecfdf5';b.style.color=bad?'#991b1b':'#065f46';b.style.borderColor=bad?'#fecaca':'#a7f3d0';b.className='banner show';clearTimeout(flashTimer);flashTimer=setTimeout(()=>{b.className='banner';},4200);}
+/* ---------- Voice command (rule-based, browser SpeechRecognition) ---------- */
+var VTEXT='',VPARSED=null,vrec=null;
+function vTermOf(n){n=String(n).toLowerCase();if(/year|annual/.test(n))return 'year';if(/quarter|quater/.test(n))return 'quarter';if(/month/.test(n))return 'month';return '';}
+function vToks(s,stop){return String(s).toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(function(w){return w&&!stop[w];});}
+function parseVoice(raw){
+  const text=' '+String(raw||'').toLowerCase().replace(/%/g,' percent ')+' ';
+  const ttoks=text.replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean);
+  const has=function(w){return ttoks.indexOf(w)>=0;};
+  const termIn=/year|annual/.test(text)?'year':(/quarter|quater/.test(text)?'quarter':(/month/.test(text)?'month':''));
+  let planIdx=-1,planName='',best=0;
+  (STATE.catalog.plans||[]).forEach(function(pl,i){const nt=vToks(pl.name,{plan:1,the:1,a:1});if(!nt.length)return;let hit=0;nt.forEach(function(w){if(has(w))hit++;});const sc=hit/nt.length;if(sc>best){best=sc;planIdx=i;planName=pl.name;}});
+  if(best<0.5){planIdx=-1;planName='';}
+  const ADDON_STOP={plan:1,the:1,a:1,'for':1,and:1,of:1,'with':1,add:1,'on':1,addon:1,yearly:1,year:1,annual:1,quarter:1,quarterly:1,quater:1,monthly:1,month:1,starter:1,connect:1,advance:1,max:1,booster:1,digistay:1,rooms:1,room:1,license:1,additional:1,services:1,service:1};
+  const addons=[],seen={};
+  (STATE.catalog.addons||[]).forEach(function(a,i){const dt=vToks(a.name,ADDON_STOP);if(!dt.length)return;if(!dt.every(has))return;const at=vTermOf(a.name);if(at&&termIn&&at!==termIn)return;if(at&&!termIn)return;const key=dt.join('|')+'|'+at;if(seen[key])return;seen[key]=1;addons.push({i:i,name:a.name});});
+  let discount=null;const dm=text.match(/(\d+(?:\.\d+)?)\s*percent/);if(dm)discount=Number(dm[1]);
+  let state='',slen=0;Object.keys(STATE_CODE).forEach(function(k){if(text.indexOf(' '+k)>=0&&k.length>slen){slen=k.length;state=k.replace(/\b\w/g,function(c){return c.toUpperCase();});}});
+  let taxMode='';if(/igst|inter[ -]?state|interstate|other state|different state/.test(text))taxMode='inter';else if(/cgst|sgst|intra|same state|within state/.test(text))taxMode='intra';
+  let customer='';const cm=String(raw||'').match(/(?:customer|client|hotel name|name is|hotel)\s+([a-z0-9 .,&'-]+?)(?=\s+(?:plan|add ?on|addon|discount|state|igst|cgst|sgst|tax|percent|%)|$)/i);if(cm)customer=cm[1].trim().replace(/\s+/g,' ');
+  return {customer:customer,planIdx:planIdx,planName:planName,addons:addons,discount:discount,state:state,taxMode:taxMode};
+}
+function voicePreview(){const p=parseVoice(VTEXT);VPARSED=p;
+  const rows=[['Plan',p.planName||'—'],['Add-ons',p.addons.length?p.addons.map(function(a){return a.name;}).join(', '):'—'],['Discount',p.discount!=null?(p.discount+'%'):'—'],['State',p.state||'—'],['Tax',p.taxMode==='inter'?'IGST':(p.taxMode==='intra'?'CGST + SGST':'—')]];
+  $('voiceParsed').innerHTML='<div style="font-weight:600;font-size:12px;margin-bottom:6px">Understood (edit the customer if needed):</div>'+
+    '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b;min-width:74px;font-size:13px">Customer</span><input id="voiceCust" value="'+esc(p.customer)+'" placeholder="(say or type the customer)" style="flex:1;font:inherit;border:1px solid var(--line);border-radius:7px;padding:5px 8px"></div>'+
+    rows.map(function(r){return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">'+r[0]+'</span><b>'+esc(r[1])+'</b></div>';}).join('');
+  $('voiceApply').disabled=!(p.customer||p.planIdx>=0||p.addons.length||p.discount!=null||p.state||p.taxMode);
+}
+function voiceStart(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('voiceState').textContent='Voice input is not supported here — use Chrome or Edge.';return;}
+  vrec=new SR();vrec.lang='en-IN';vrec.interimResults=true;vrec.continuous=true;let fin='';
+  $('voiceState').textContent='Listening… speak, then click Stop.';$('voiceStart').textContent='■ Stop';$('voiceStart').onclick=voiceStop;
+  vrec.onresult=function(e){let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=t+' ';else interim+=t;}VTEXT=(fin+interim).trim();$('voiceText').textContent=VTEXT;voicePreview();};
+  vrec.onerror=function(e){$('voiceState').textContent='Mic error: '+(e.error||'unknown')+(e.error==='not-allowed'?' — allow microphone access.':'');};
+  vrec.onend=function(){$('voiceStart').textContent='● Start listening';$('voiceStart').onclick=voiceStart;$('voiceState').textContent='Stopped. Review below, then Apply.';};
+  try{vrec.start();}catch(e){}
+}
+function voiceStop(){if(vrec){try{vrec.stop();}catch(e){}}}
+function openVoice(){VTEXT='';VPARSED=null;$('voiceText').textContent='';$('voiceParsed').innerHTML='';$('voiceApply').disabled=true;$('voiceState').textContent='Click “Start” and say the customer, plan, add-ons, discount, state and tax type.';$('voiceStart').textContent='● Start listening';$('voiceStart').onclick=voiceStart;$('voiceModal').style.display='flex';}
+function closeVoice(){voiceStop();$('voiceModal').style.display='none';}
+function applyVoice(){const p=VPARSED;if(!p)return;voiceStop();
+  const cust=($('voiceCust')?$('voiceCust').value.trim():'')||p.customer;p.customer=cust;
+  if(cust)$('custName').value=cust;
+  if(p.state){$('custState').value=p.state;STATE.cur._stateManual=true;}
+  if(p.taxMode)$('taxMode').value=p.taxMode;
+  syncStateFromForm();
+  if(!p.taxMode&&p.state)resolveTax();
+  if(p.planIdx>=0)addPlan(p.planIdx);
+  (p.addons||[]).forEach(function(a){addAddon(a.i);});
+  if(p.discount!=null){if($('discPctInput'))$('discPctInput').value=p.discount;applyDiscPct(p.discount);}
+  markDirty();render();
+  $('voiceModal').style.display='none';
+  flash('🎤 Applied: '+[p.customer?('customer '+p.customer):'',p.planName||'',(p.addons||[]).map(function(a){return a.name;}).join(', '),p.discount!=null?(p.discount+'%'):'',p.state||'',p.taxMode?(p.taxMode==='inter'?'IGST':'CGST+SGST'):''].filter(Boolean).join(' · '));
+}
 
 /* ---------- wire up ---------- */
 function applyDiscVisibility(){const on=!!STATE.hideDisc;if($('discBody'))$('discBody').style.display=on?'none':'';if($('discHidden'))$('discHidden').style.display=on?'':'none';if($('hideDiscBtn'))$('hideDiscBtn').textContent=on?'👁 Show':'🙈 Hide';}
@@ -1479,6 +1547,9 @@ function bindForm(){
   $('zohoMatchBtn').onclick=matchZoho;
   $('rebuildBtn').onclick=()=>buildCatalog(true);
   $('newBtn').onclick=()=>{if(STATE.dirty&&!confirm('Discard unsaved changes?'))return;newQuote();};
+  $('voiceBtn').onclick=openVoice;
+  $('voiceApply').onclick=applyVoice;$('voiceCancel').onclick=closeVoice;$('voiceClose').onclick=closeVoice;
+  $('voiceModal').onclick=function(e){if(e.target===$('voiceModal'))closeVoice();};
   $('saveBtn').onclick=saveQuote;$('dupBtn').onclick=duplicateQuote;
   $('delBtn').onclick=()=>flash('Deletion is locked here — quotations can only be deleted in Zoho by an admin with delete access.',true);
   $('pdfBtn').onclick=()=>window.print();$('emailBtn').onclick=emailQuote;
