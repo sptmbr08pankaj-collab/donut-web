@@ -1342,7 +1342,9 @@ async function pushToHubspotNote(q){
 }
 function setSync(m,busy){const el=$('syncStatus');if(!el)return;el.textContent=m;el.style.color=busy?'var(--brand)':(/✗/.test(m)?'var(--danger)':'var(--ok)');}
 async function syncExternal(opts){
-  if(STATE.syncing)return;STATE.syncing=true;
+  if(STATE.syncing)return;
+  if(opts.zoho&&!quoteReady())return;
+  STATE.syncing=true;
   syncStateFromForm();
   if(!STATE.cur.number){STATE.cur.number=nextNumber();$('quoteNumber').value=STATE.cur.number;}
   STATE.cur.saved=true;
@@ -1459,7 +1461,13 @@ function renderQuoteResults(q){
   dd.className='dropdown show';
 }
 function newQuote(){STATE.cur=blankQuote();syncFormFromState();computeStep();renderWizard();render();clearDirty();refreshQuoteSelect();checkPriceDrift();$('zohoMatchInfo').textContent='';renderCoupons();}
-function saveQuote(){syncStateFromForm();if(!STATE.cur.number){STATE.cur.number=nextNumber();$('quoteNumber').value=STATE.cur.number;}STATE.cur.saved=true;
+// Gate before any save/send: a customer must be selected AND at least one plan/add-on/service must be added.
+function quoteReady(){syncStateFromForm();
+  if(!String(STATE.cur.customer.name||'').trim()){flash('Add a customer first — select or enter the customer before the quotation can be saved or sent.',true);return false;}
+  if(!STATE.cur.lines.length){flash('Add at least one plan, add-on or service before the quotation can be saved or sent.',true);return false;}
+  return true;}
+function saveQuote(){if(!quoteReady())return;
+  if(!STATE.cur.number){STATE.cur.number=nextNumber();$('quoteNumber').value=STATE.cur.number;}STATE.cur.saved=true;
   persistCur();clearDirty();refreshQuoteSelect();
   if(!STATE.cur.lines.length){flash('Saved '+STATE.cur.number+'.');return;}
   // Every save pushes to Zoho in real time (creates a draft, or updates the existing estimate). HubSpot note is optional.
