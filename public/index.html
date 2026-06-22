@@ -2238,7 +2238,7 @@ init();
     <div><div class="hubtitle">📞 HubSpot · Sales Performance</div><div class="hubsub">Leads &amp; call activity from HubSpot</div></div>
     <button id="hubRefresh" class="hubbtn">↻ Refresh</button>
   </div>
-  <div class="hubtabs"><button class="hubtab on" data-hsec="contacts">Contacts</button><button class="hubtab" data-hsec="deals">Deals</button></div>
+  <div class="hubtabs"><button class="hubtab on" data-hsec="contacts">Contacts</button><button class="hubtab" data-hsec="stuck" id="hubTabStuck">🚨 Stuck leads</button><button class="hubtab" data-hsec="bypoc">By POC</button><button class="hubtab" data-hsec="leaderboard">Leaderboard</button><button class="hubtab" data-hsec="deals">Deals</button></div>
   <div class="hubfrow">
     <span class="hubf"><span class="l">Period</span>
       <select id="hubPeriod"><option value="mtd">This month</option><option value="lastmonth">Last month</option><option value="3m" selected>Last 3 months</option><option value="all">All time</option><option value="custom">Custom dates</option></select></span>
@@ -2262,6 +2262,23 @@ init();
     <div class="hubph2">By agent</div>
     <div class="hubpanel" style="overflow-x:auto"><table id="hubAgentTable"><thead></thead><tbody></tbody></table></div>
     <div class="hubhint" id="hubNote" style="margin-top:8px"></div>
+  </section>
+  <section class="hsec" id="hsec-stuck">
+    <div class="hubhint" style="margin-bottom:10px">Open leads sitting in the same status with no logged activity for 3+ days. 🚨 = needs attention. Click a card or a row to open the lead in HubSpot.</div>
+    <div class="hubcards" id="stuckCards"></div>
+    <div class="hubph2">All stuck leads</div>
+    <div class="hubpanel" style="overflow-x:auto"><table id="stuckTable"><thead></thead><tbody></tbody></table></div>
+    <div class="hubhint" id="stuckNote" style="margin-top:8px"></div>
+  </section>
+  <section class="hsec" id="hsec-bypoc">
+    <div class="hubph2">By POC performance</div>
+    <div class="hubpanel" style="overflow-x:auto"><table id="hubPocTable"><thead></thead><tbody></tbody></table></div>
+    <div class="hubhint" id="hubPocNote" style="margin-top:8px"></div>
+  </section>
+  <section class="hsec" id="hsec-leaderboard">
+    <div class="hubph2">Leaderboard <span class="hubhint">· for the selected period &amp; agents</span></div>
+    <div class="hubcards" id="hubRanks" style="grid-template-columns:repeat(auto-fill,minmax(230px,1fr))"></div>
+    <div class="hubhint" id="hubRankNote" style="margin-top:8px"></div>
   </section>
   <section class="hsec" id="hsec-deals">
     <div class="hubpanel"><div class="hubph">Deals — not yet enabled</div>
@@ -2290,6 +2307,8 @@ const $=function(id){return document.getElementById(id);};
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const PAGECAP=40,LIMIT=200;
 let OWN={},AGSEL=new Set(),HCON=[],HCALL=[],GRAN='month',HSTART=false,hubChart=null,HUBPID='',HUBDOM='app.hubspot.com',CNAME={};
+let HDEMO=[],HCONV=[],HDEAL=[],DEALSOK=false,HSTUCK=[];
+const STUCK_DAYS=3;
 function hubUrl(id){return 'https://'+HUBDOM+'/contacts/'+HUBPID+'/record/0-1/'+id;}
 function fmt(n){return new Intl.NumberFormat('en-IN').format(Math.round(Number(n)||0));}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
@@ -2347,6 +2366,21 @@ async function load(){
     const k=await fetchAll('calls','hs_timestamp',[{propertyName:'hs_call_direction',operator:'EQ',value:'OUTBOUND'}],['hs_timestamp','hs_call_disposition','hs_call_direction','hubspot_owner_id']);
     HCALL=k.rows.map(x=>({id:x.id,t:Date.parse(x.properties.hs_timestamp)||0,own:String(x.properties.hubspot_owner_id||''),disp:x.properties.hs_call_disposition||''}));
     await attachContacts(HCALL);
+    // demos conducted + conversions in the period (by the date the lead entered that status)
+    setStatus('Loading demos…');
+    const dm=await fetchAll('contacts','date_entered_in_demo_done',[],['date_entered_in_demo_done','hubspot_owner_id','firstname','lastname','email']);
+    HDEMO=dm.rows.map(x=>{const p=x.properties;return {id:x.id,t:Date.parse(p.date_entered_in_demo_done)||0,own:String(p.hubspot_owner_id||''),nm:((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||('Contact '+x.id),em:p.email||''};});
+    setStatus('Loading conversions…');
+    const cv=await fetchAll('contacts','date_entered_in_converted',[],['date_entered_in_converted','hubspot_owner_id','firstname','lastname','email']);
+    HCONV=cv.rows.map(x=>{const p=x.properties;return {id:x.id,t:Date.parse(p.date_entered_in_converted)||0,own:String(p.hubspot_owner_id||''),nm:((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||('Contact '+x.id),em:p.email||''};});
+    // deals created in the period (needs the crm.objects.deals.read scope; degrades gracefully if missing)
+    setStatus('Loading deals…');
+    try{const dl=await fetchAll('deals','createdate',[],['createdate','hubspot_owner_id','dealname']);
+      HDEAL=dl.rows.map(x=>{const p=x.properties;return {id:x.id,t:Date.parse(p.createdate)||0,own:String(p.hubspot_owner_id||''),nm:p.dealname||('Deal '+x.id)};});DEALSOK=true;
+    }catch(e){HDEAL=[];DEALSOK=false;}
+    // stuck leads — snapshot of open leads idle 3+ days (period-independent)
+    setStatus('Loading stuck leads…');
+    await loadStuck();
     setStatus('Updated '+new Date().toLocaleString()+(c.capped||k.capped?(' · note: results capped at '+(PAGECAP*LIMIT)+' records — narrow the period for full accuracy'):''));
     render();
   }catch(e){setStatus('⚠ '+e.message);}
@@ -2391,6 +2425,81 @@ function render(){
   if(typeof Chart!=='undefined'){if(hubChart){try{hubChart.destroy();}catch(e){}}
     hubChart=new Chart($('hubTrendChart'),{type:'bar',data:{labels:labels,datasets:[{label:'Assigned',data:aData,backgroundColor:'#3b82f6',borderRadius:4},{label:'Contacted',data:cData,backgroundColor:'#0d9488',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:12,font:{size:11}}}},scales:{y:{beginAtZero:true,ticks:{font:{size:11}}},x:{ticks:{font:{size:10}}}}}});}
   $('hubNote').textContent='Leads assigned = leads assigned to the POC in the period (by HubSpot owner-assigned date, not lead create date). Contacted = distinct leads with ≥1 outbound call logged. Attempts = outbound calls. Calls are attributed to the agent who made them.';
+  renderStuck();renderByPoc();renderLeaderboard();
+}
+/* ---------- Stuck-leads tracker (open leads idle 3+ days) ---------- */
+async function loadStuck(){
+  const props=['hs_lead_status','hubspot_owner_id','notes_last_contacted','notes_last_updated','createdate','firstname','lastname','email'];
+  const statuses=['NEW','Demo Pending','Demo Conducted'];
+  // Group 1: open leads owned by a Sales POC still in an early status.
+  // Group 2: "Unassigned" = leads with no owner that are still open (lifecycle=lead, not dead/converted/prospected).
+  const fg=[];
+  if(SALES_IDS.length)fg.push({filters:[{propertyName:'hs_lead_status',operator:'IN',values:statuses},{propertyName:'hubspot_owner_id',operator:'IN',values:SALES_IDS}]});
+  fg.push({filters:[{propertyName:'hubspot_owner_id',operator:'NOT_HAS_PROPERTY'},{propertyName:'lifecyclestage',operator:'EQ',value:'lead'},{propertyName:'hs_lead_status',operator:'NOT_IN',values:['Not Prospect','Cold','Nurture','Demo Rejected','Demo No-Show','CONVERTED','Prospected']}]});
+  let after,out=[],pages=0;
+  do{const body={limit:LIMIT,properties:props,sorts:[{propertyName:'lastmodifieddate',direction:'DESCENDING'}],filterGroups:fg};
+    if(after)body.after=after;
+    const d=await hc('search_objects',{objectType:'contacts',body:body});
+    (d.results||[]).forEach(x=>out.push(x));
+    after=d.paging&&d.paging.next&&d.paging.next.after;pages++;
+    setStatus('Loading stuck leads… '+out.length);
+  }while(after&&pages<PAGECAP);
+  const now=Date.now();
+  HSTUCK=out.map(function(x){const p=x.properties;
+    const lc=Date.parse(p.notes_last_contacted||'')||0,lu=Date.parse(p.notes_last_updated||'')||0,cr=Date.parse(p.createdate||'')||0;
+    const anchor=Math.max(lc,lu)||cr;
+    const idle=anchor?Math.floor((now-anchor)/86400000):999;
+    return {id:x.id,nm:((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||('Contact '+x.id),em:p.email||'',own:String(p.hubspot_owner_id||''),st:p.hs_lead_status||'',anchor:anchor,idle:idle};});
+}
+function stuckList(){return HSTUCK.filter(l=>l.idle>=STUCK_DAYS).filter(l=>l.own?agPass(l.own):(AGSEL.size===0));}
+function stuckBucket(l){return l.own?l.st:'unassigned';}
+function renderStuck(){
+  const list=stuckList();
+  const buckets=[['unassigned','Unassigned'],['NEW','New Lead'],['Demo Pending','Demo Pending'],['Demo Conducted','Demo Conducted']];
+  const cnt={};list.forEach(l=>{const b=stuckBucket(l);cnt[b]=(cnt[b]||0)+1;});
+  $('stuckCards').innerHTML=buckets.map(b=>'<div class="hk clk" data-stuck="'+b[0]+'"><div class="l">'+b[1]+'</div><div class="v" style="color:'+(cnt[b[0]]?'var(--danger)':'var(--ink)')+'">'+(cnt[b[0]]?'🚨 ':'')+fmt(cnt[b[0]]||0)+'</div><div class="s">'+STUCK_DAYS+'+ days idle · click to view</div></div>').join('');
+  $('stuckCards').querySelectorAll('.hk[data-stuck]').forEach(el=>el.onclick=function(){openStuckDrill(el.getAttribute('data-stuck'));});
+  const sorted=list.slice().sort((a,b)=>b.idle-a.idle);
+  $('stuckTable').querySelector('thead').innerHTML='<tr><th>Lead</th><th>Status</th><th>Owner</th><th>Last activity</th><th>Idle (days)</th><th></th></tr>';
+  $('stuckTable').querySelector('tbody').innerHTML=sorted.map(l=>'<tr><td style="text-align:left">'+esc(l.nm)+(l.em?'<div style="font-size:11px;color:var(--muted)">'+esc(l.em)+'</div>':'')+'</td><td style="text-align:left">'+esc(l.own?l.st:'Unassigned')+'</td><td style="text-align:left">'+esc(l.own?ownerName(l.own):'—')+'</td><td>'+(l.anchor&&l.idle<999?new Date(l.anchor).toLocaleDateString():'never')+'</td><td style="color:var(--danger);font-weight:600">🚨 '+(l.idle<999?l.idle:'—')+'</td><td><a href="'+hubUrl(l.id)+'" target="_blank" rel="noopener" class="hublink">Open in HubSpot ↗</a></td></tr>').join('')||'<tr><td colspan="6" class="hubhint" style="padding:16px">No stuck leads 🎉</td></tr>';
+  const tab=$('hubTabStuck');if(tab)tab.innerHTML='🚨 Stuck leads'+(list.length?' <span style="background:var(--danger);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">'+list.length+'</span>':'');
+  $('stuckNote').textContent='Stuck = lead is still in Unassigned/New/Demo Pending/Demo Conducted and has had no logged call, email or activity for '+STUCK_DAYS+'+ days. Idle days are counted from the last activity (or the creation date if never contacted). This is a live snapshot and ignores the period filter.';
+}
+function openStuckDrill(bucket){
+  const labels={unassigned:'Unassigned','NEW':'New Lead','Demo Pending':'Demo Pending','Demo Conducted':'Demo Conducted'};
+  const list=stuckList().filter(l=>stuckBucket(l)===bucket).sort((a,b)=>b.idle-a.idle);
+  $('hubModalTitle').textContent=(labels[bucket]||bucket)+' · stuck '+STUCK_DAYS+'+ days · '+list.length;
+  $('hubModalBody').innerHTML=list.length?('<table><thead><tr><th style="text-align:left">Lead</th><th style="text-align:left">Owner</th><th>Idle</th><th></th></tr></thead><tbody>'+list.map(l=>'<tr><td style="text-align:left">'+esc(l.nm)+(l.em?'<div style="font-size:11px;color:var(--muted)">'+esc(l.em)+'</div>':'')+'</td><td style="text-align:left">'+esc(l.own?ownerName(l.own):'—')+'</td><td style="color:var(--danger);font-weight:600">🚨 '+(l.idle<999?l.idle+'d':'—')+'</td><td><a href="'+hubUrl(l.id)+'" target="_blank" rel="noopener" class="hublink">Open in HubSpot ↗</a></td></tr>').join('')+'</tbody></table>'):'<div class="hubhint" style="padding:14px">None in this bucket.</div>';
+  $('hubModal').style.display='flex';
+}
+/* ---------- By-POC + leaderboard ---------- */
+function pocAgg(){
+  const con=HCON.filter(c=>agPass(c.own)),cal=HCALL.filter(c=>agPass(c.own));
+  const dem=HDEMO.filter(c=>agPass(c.own)),cnv=HCONV.filter(c=>agPass(c.own)),del=HDEAL.filter(c=>agPass(c.own));
+  const A={};function ag(o){return A[o]||(A[o]={own:o,assigned:0,cset:{},demos:0,conv:0,deals:0});}
+  SALES_IDS.forEach(id=>ag(id));
+  con.forEach(c=>ag(c.own).assigned++);
+  cal.forEach(c=>{if(c._cid)ag(c.own).cset[c._cid]=1;});
+  dem.forEach(c=>ag(c.own).demos++);cnv.forEach(c=>ag(c.own).conv++);del.forEach(c=>ag(c.own).deals++);
+  return Object.values(A).map(a=>({name:ownerName(a.own),touched:Object.keys(a.cset).length,assigned:a.assigned,demos:a.demos,conv:a.conv,deals:a.deals}));
+}
+function renderByPoc(){
+  const rows=pocAgg().sort((a,b)=>b.touched-a.touched);
+  $('hubPocTable').querySelector('thead').innerHTML='<tr><th>POC</th><th>Leads assigned</th><th>Leads touched</th><th>Demos conducted</th><th>Converted</th><th>Deals created</th></tr>';
+  $('hubPocTable').querySelector('tbody').innerHTML=rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+fmt(r.assigned)+'</td><td>'+fmt(r.touched)+'</td><td>'+fmt(r.demos)+'</td><td>'+fmt(r.conv)+'</td><td>'+(DEALSOK?fmt(r.deals):'—')+'</td></tr>').join('')||'<tr><td colspan="6" class="hubhint" style="padding:16px">No data for this selection.</td></tr>';
+  $('hubPocNote').textContent='Leads touched = distinct leads with ≥1 outbound call. Demos conducted / Converted are counted by the date the lead entered that status within the selected period.'+(DEALSOK?'':' · Deals created needs the crm.objects.deals.read scope.');
+}
+function rankCard(title,arr,key,suffix){
+  const sorted=arr.slice().filter(p=>p[key]>0).sort((a,b)=>b[key]-a[key]);
+  if(!sorted.length)return '<div class="hk"><div class="l">'+title+'</div><div class="v" style="color:var(--muted)">—</div></div>';
+  const w=sorted[0];
+  return '<div class="hk"><div class="l">'+title+'</div><div class="v">🥇 '+esc(w.name)+'</div><div class="s" style="font-size:13px;color:var(--brand);font-weight:700;margin-top:2px">'+fmt(w[key])+(suffix||'')+'</div><ol style="margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:12px">'+sorted.slice(1,4).map(p=>'<li>'+esc(p.name)+' · '+fmt(p[key])+(suffix||'')+'</li>').join('')+'</ol></div>';
+}
+function renderLeaderboard(){
+  const arr=pocAgg();
+  const dealsCard=DEALSOK?rankCard('Most deals created',arr,'deals'):'<div class="hk"><div class="l">Most deals created</div><div class="s" style="margin-top:8px">Add the <b>crm.objects.deals.read</b> scope to the HubSpot private app to enable.</div></div>';
+  $('hubRanks').innerHTML=rankCard('Most leads touched',arr,'touched')+rankCard('Most demos conducted',arr,'demos')+rankCard('Most leads converted',arr,'conv')+dealsCard;
+  $('hubRankNote').textContent='Leads touched = distinct leads with ≥1 outbound call. Demos conducted / Converted are counted by the date the lead entered that status within the selected period.'+(DEALSOK?' Deals created = deals created in the period, by owner.':'');
 }
 async function openLeadDrill(kind){
   $('hubModalTitle').textContent=(kind==='assigned'?'Leads assigned':'Leads contacted')+' — loading…';
