@@ -2232,13 +2232,45 @@ init();
 #view-hubspot .hubmbody{padding:6px 16px 16px;overflow:auto}
 #view-hubspot .hublink{color:var(--brand);text-decoration:none;font-weight:600;font-size:12px}
 #view-hubspot .hublink:hover{text-decoration:underline}
+/* Left sidebar layout — mirrors the Performance dashboard */
+#view-hubspot .hubroot{display:flex;min-height:calc(100vh - 45px);background:var(--bg)}
+#view-hubspot .hsb{position:sticky;top:45px;height:calc(100vh - 45px);flex:none;width:240px;transition:width .25s ease;border-right:1px solid var(--line);background:var(--card);padding:8px;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+#view-hubspot .hsb.collapsed{width:64px}
+#view-hubspot .hsb .brand2{display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid var(--line);margin-bottom:8px}
+#view-hubspot .hsb .logo2{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#ff7a59,#e8502a);display:grid;place-content:center;color:#fff;flex:none;font-size:18px}
+#view-hubspot .hsb .bt{font-size:13px;font-weight:750;color:var(--ink);line-height:1.15}
+#view-hubspot .hsb .bs{font-size:11px;color:var(--muted)}
+#view-hubspot .hsb.collapsed .lbl2,#view-hubspot .hsb.collapsed .brandtext,#view-hubspot .hsb.collapsed .sechd,#view-hubspot .hsb.collapsed .nb,#view-hubspot .hsb.collapsed .htxt{display:none}
+#view-hubspot .hnav{display:flex;align-items:center;height:42px;width:100%;border:0;background:transparent;border-radius:8px;color:var(--muted);cursor:pointer;position:relative;text-align:left}
+#view-hubspot .hnav:hover{background:rgba(128,128,128,.10);color:var(--ink)}
+#view-hubspot .hnav.on{background:#eff6ff;color:#2563eb;border-left:2px solid #3b82f6}
+#view-hubspot .hnav .ico{width:48px;display:grid;place-content:center;flex:none}
+#view-hubspot .hnav .lbl2{font-size:13px;font-weight:600}
+#view-hubspot .hnav .nb{position:absolute;right:10px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;display:grid;place-content:center}
+#view-hubspot .sechd{padding:12px 12px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700;border-top:1px solid var(--line);margin-top:6px}
+#view-hubspot .hsbtoggle{margin-top:auto;border-top:1px solid var(--line);border-radius:0}
+#view-hubspot .hmain{flex:1;min-width:0;padding:18px 22px}
 </style>
-<div class="hubwrap">
+<div class="hubroot" id="hubroot">
+  <nav class="hsb" id="hsb">
+    <div class="brand2">
+      <div class="logo2">📞</div>
+      <div class="brandtext"><div class="bt">HubSpot</div><div class="bs">Sales Performance</div></div>
+    </div>
+    <button class="hnav on" data-hsec="contacts"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span class="lbl2">Contacts</span></button>
+    <button class="hnav" data-hsec="stuck" id="hubTabStuck"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="lbl2">Stuck leads</span><span class="nb" id="stuckBadge" style="display:none"></span></button>
+    <button class="hnav" data-hsec="bypoc"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></span><span class="lbl2">By POC</span></button>
+    <button class="hnav" data-hsec="leaderboard"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M5 4H4v2a3 3 0 0 0 3 3"/><path d="M19 4h1v2a3 3 0 0 1-3 3"/></svg></span><span class="lbl2">Leaderboard</span></button>
+    <button class="hnav" data-hsec="deals"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><polyline points="3 8 12 13 21 8"/><line x1="12" y1="13" x2="12" y2="23"/></svg></span><span class="lbl2">Deals</span></button>
+    <div class="sechd">Account</div>
+    <button class="hnav" id="hubNavRefresh"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></span><span class="lbl2">Refresh data</span></button>
+    <button class="hnav hsbtoggle" id="hsbToggle"><span class="ico"><svg id="hsbChevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg></span><span class="lbl2 htxt">Hide</span></button>
+  </nav>
+  <div class="hmain">
   <div class="hubhead">
     <div><div class="hubtitle">📞 HubSpot · Sales Performance</div><div class="hubsub">Leads &amp; call activity from HubSpot</div></div>
     <button id="hubRefresh" class="hubbtn">↻ Refresh</button>
   </div>
-  <div class="hubtabs"><button class="hubtab on" data-hsec="contacts">Contacts</button><button class="hubtab" data-hsec="stuck" id="hubTabStuck">🚨 Stuck leads</button><button class="hubtab" data-hsec="bypoc">By POC</button><button class="hubtab" data-hsec="leaderboard">Leaderboard</button><button class="hubtab" data-hsec="deals">Deals</button></div>
   <div class="hubfrow">
     <span class="hubf"><span class="l">Period</span>
       <select id="hubPeriod"><option value="mtd">This month</option><option value="lastmonth">Last month</option><option value="3m" selected>Last 3 months</option><option value="all">All time</option><option value="custom">Custom dates</option></select></span>
@@ -2284,6 +2316,7 @@ init();
     <div class="hubpanel"><div class="hubph">Deals — not yet enabled</div>
       <p class="hubhint">Add the <b>crm.objects.deals.read</b> scope to the HubSpot private app (Settings → Integrations → Private Apps → Scopes), then this section will track deals created, Sales→AM pipeline movement and lead→deal TAT.</p></div>
   </section>
+  </div>
 </div>
 <div id="hubModal" class="hubmodal" style="display:none">
   <div class="hubmbox">
@@ -2462,7 +2495,7 @@ function renderStuck(){
   const sorted=list.slice().sort((a,b)=>b.idle-a.idle);
   $('stuckTable').querySelector('thead').innerHTML='<tr><th>Lead</th><th>Status</th><th>Owner</th><th>Last activity</th><th>Idle (days)</th><th></th></tr>';
   $('stuckTable').querySelector('tbody').innerHTML=sorted.map(l=>'<tr><td style="text-align:left">'+esc(l.nm)+(l.em?'<div style="font-size:11px;color:var(--muted)">'+esc(l.em)+'</div>':'')+'</td><td style="text-align:left">'+esc(l.own?l.st:'Unassigned')+'</td><td style="text-align:left">'+esc(l.own?ownerName(l.own):'—')+'</td><td>'+(l.anchor&&l.idle<999?new Date(l.anchor).toLocaleDateString():'never')+'</td><td style="color:var(--danger);font-weight:600">🚨 '+(l.idle<999?l.idle:'—')+'</td><td><a href="'+hubUrl(l.id)+'" target="_blank" rel="noopener" class="hublink">Open in HubSpot ↗</a></td></tr>').join('')||'<tr><td colspan="6" class="hubhint" style="padding:16px">No stuck leads 🎉</td></tr>';
-  const tab=$('hubTabStuck');if(tab)tab.innerHTML='🚨 Stuck leads'+(list.length?' <span style="background:var(--danger);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px">'+list.length+'</span>':'');
+  const bdg=$('stuckBadge');if(bdg){if(list.length){bdg.textContent=list.length;bdg.style.display='';}else bdg.style.display='none';}
   $('stuckNote').textContent='Stuck = lead is still in Unassigned/New/Demo Pending/Demo Conducted and has had no logged call, email or activity for '+STUCK_DAYS+'+ days. Idle days are counted from the last activity (or the creation date if never contacted). This is a live snapshot and ignores the period filter.';
 }
 function openStuckDrill(bucket){
@@ -2532,7 +2565,10 @@ function init(){
   document.addEventListener('click',function(e){var m=$('hubAgMenu');if(m&&m.style.display!=='none'&&!(e.target.closest&&e.target.closest('.agdd')))m.style.display='none';});
   // Trend granularity drives the period options: Day -> today/yesterday/this week/last week; Month -> month ranges.
   $('hubGran').querySelectorAll('button').forEach(b=>b.onclick=function(){GRAN=b.getAttribute('data-g');$('hubGran').querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');setPeriodOptions(GRAN);load();});
-  document.querySelectorAll('#view-hubspot .hubtab').forEach(b=>b.onclick=function(){document.querySelectorAll('#view-hubspot .hubtab').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.querySelectorAll('#view-hubspot .hsec').forEach(s=>s.classList.toggle('on',s.id==='hsec-'+b.getAttribute('data-hsec')));});
+  document.querySelectorAll('#view-hubspot .hnav[data-hsec]').forEach(b=>b.onclick=function(){document.querySelectorAll('#view-hubspot .hnav[data-hsec]').forEach(x=>x.classList.remove('on'));b.classList.add('on');document.querySelectorAll('#view-hubspot .hsec').forEach(s=>s.classList.toggle('on',s.id==='hsec-'+b.getAttribute('data-hsec')));});
+  if($('hubNavRefresh'))$('hubNavRefresh').onclick=load;
+  $('hsbToggle').onclick=function(){var sb=$('hsb');sb.classList.toggle('collapsed');var ch=$('hsbChevron');if(ch)ch.style.transform=sb.classList.contains('collapsed')?'rotate(180deg)':'';try{localStorage.setItem('donut_hsb_collapsed',sb.classList.contains('collapsed')?'1':'0');}catch(e){}};
+  try{if(localStorage.getItem('donut_hsb_collapsed')==='1'){$('hsb').classList.add('collapsed');var ch=$('hsbChevron');if(ch)ch.style.transform='rotate(180deg)';}}catch(e){}
   $('hubModalClose').onclick=function(){$('hubModal').style.display='none';};
   $('hubModal').onclick=function(e){if(e.target===$('hubModal'))$('hubModal').style.display='none';};
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&$('hubModal'))$('hubModal').style.display='none';});
@@ -2540,7 +2576,7 @@ function init(){
   applyAccess();setTimeout(applyAccess,1800);setTimeout(applyAccess,4000);
   window.__hubOnShow=function(){
     var ok=applyAccess();
-    var els=document.querySelectorAll('#view-hubspot .hubtabs,#view-hubspot .hubfrow,#view-hubspot .hsec');
+    var els=document.querySelectorAll('#view-hubspot .hsb,#view-hubspot .hubfrow,#view-hubspot .hsec');
     if(!ok){$('hubStatus').textContent='Access restricted — the HubSpot performance dashboard is for the Sales team only ('+SALES.join(', ')+').';els.forEach(function(e){e.style.display='none';});return;}
     els.forEach(function(e){e.style.display='';});
     if(HSTART)return;HSTART=true;load();
