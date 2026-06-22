@@ -1488,7 +1488,12 @@ function parseVoice(raw){
   let discount=null;const dm=text.match(/(\d+(?:\.\d+)?)\s*percent/);if(dm)discount=Number(dm[1]);
   let state='',slen=0;Object.keys(STATE_CODE).forEach(function(k){if(text.indexOf(' '+k)>=0&&k.length>slen){slen=k.length;state=k.replace(/\b\w/g,function(c){return c.toUpperCase();});}});
   let taxMode='';if(/igst|inter[ -]?state|interstate|other state|different state/.test(text))taxMode='inter';else if(/cgst|sgst|intra|same state|within state/.test(text))taxMode='intra';
-  let customer='';const cm=String(raw||'').match(/(?:customer|client|hotel name|name is|hotel)\s+([a-z0-9 .,&'-]+?)(?=\s+(?:plan|add ?on|addon|discount|state|igst|cgst|sgst|tax|percent|%)|$)/i);if(cm)customer=cm[1].trim().replace(/\s+/g,' ');
+  const STOPW="plan|add ?ons?|addon|discount|state|igst|cgst|sgst|tax|percent|yearly|year|annual|quarter|quarterly|quater|monthly|month|connect|starter|advance|max|booster|revenue|core|pro";
+  let customer='';
+  let cm=String(raw||'').match(new RegExp("(?:find\\s+)?(?:customer|client|hotel name|name is|hotel|for)\\s+([a-z0-9 .,&'-]+?)(?=\\s+(?:"+STOPW+")\\b|$)","i"));
+  if(cm&&cm[1])customer=cm[1].trim().replace(/\s+/g,' ');
+  if(!customer){const lead=String(raw||'').match(new RegExp("^\\s*([a-z0-9 .,&'-]+?)(?=\\s+(?:"+STOPW+")\\b|$)","i"));if(lead&&lead[1]){const t=lead[1].trim();if(t.split(/\s+/).length<=6)customer=t.replace(/\s+/g,' ');}}
+  customer=customer.replace(/^(?:find|the)\s+/i,'').trim();
   return {customer:customer,planIdx:planIdx,planName:planName,addons:addons,discount:discount,state:state,taxMode:taxMode};
 }
 function voicePreview(){const p=parseVoice(VTEXT);VPARSED=p;
@@ -1505,9 +1510,14 @@ async function voiceSearchCust(){
   const box=$('voiceCustMatches');if(!box)return;
   if(q.length<2){box.innerHTML='<div class="hint" style="font-size:12px">Type or say at least 2 characters, then Search.</div>';return;}
   box.innerHTML='<div class="hint" style="font-size:12px">Searching HubSpot…</div>';
+  const props=['firstname','lastname','email','phone','city','state','property_state','pincode','zip','hubspot_owner_id','hotel_name','hotel_name_enriched','enrichment_hotel_name','referred_hotel_name','digistay_room_count','number_of_rooms','number_of_rooms_in_your_hotel','property_rooms','property_name','whats_your_property_type'];
   try{
-    const obj=await call(HUBSPOT+'__search_crm_objects',{objectType:'contacts',query:q,limit:8,properties:['firstname','lastname','email','phone','city','state','property_state','pincode','zip','hubspot_owner_id','hotel_name','hotel_name_enriched','enrichment_hotel_name','referred_hotel_name','digistay_room_count','number_of_rooms','number_of_rooms_in_your_hotel','property_rooms','property_name','whats_your_property_type'],chatInsights:{userIntent:'Voice: look up a customer to build a quotation',satisfaction:'NEUTRAL'}});
-    const res=(obj&&obj.results)||(obj&&obj.data&&obj.data.results)||[];VRES=res;
+    // query matches name/email/phone/company; the filter groups add hotel/property name (custom props the query ignores).
+    const byq=call(HUBSPOT+'__search_crm_objects',{objectType:'contacts',query:q,limit:8,properties:props,chatInsights:{userIntent:'Voice: look up a customer to build a quotation',satisfaction:'NEUTRAL'}});
+    const byhotel=call(HUBSPOT+'__search_objects',{objectType:'contacts',body:{limit:8,properties:props,filterGroups:[{filters:[{propertyName:'hotel_name',operator:'CONTAINS_TOKEN',value:q}]},{filters:[{propertyName:'property_name',operator:'CONTAINS_TOKEN',value:q}]},{filters:[{propertyName:'hotel_name_enriched',operator:'CONTAINS_TOKEN',value:q}]}]}});
+    const r1=await byq.catch(function(){return {};});const r2=await byhotel.catch(function(){return {};});
+    let all=(((r1&&r1.results)||(r1&&r1.data&&r1.data.results)||[])).concat((r2&&r2.results)||[]);
+    const seen={};let res=[];all.forEach(function(r){if(r&&r.id&&!seen[r.id]){seen[r.id]=1;res.push(r);}});res=res.slice(0,10);VRES=res;
     if(!res.length){box.innerHTML='<div class="hint" style="font-size:12px">No HubSpot contact found — it will be added as a new name on Apply.</div>';return;}
     box.innerHTML='<div style="font-size:12px;color:#64748b;margin:2px 0 5px">Pick the matching lead:</div>'+res.map(function(r,idx){const p=r.properties||{};const nm=((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||'(no name)';const hot=firstVal(p.hotel_name,p.property_name,p.hotel_name_enriched,p.enrichment_hotel_name,p.referred_hotel_name);return '<div class="vmatch" data-i="'+idx+'" style="border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin-bottom:5px;cursor:pointer"><div style="font-weight:600;font-size:13px">'+esc(nm)+(hot?(' · '+esc(hot)):'')+'</div><div style="font-size:12px;color:#64748b">'+esc(p.email||'no email')+' · '+esc(p.phone||'')+' · '+esc([p.city,p.state].filter(Boolean).join(', '))+'</div></div>';}).join('');
     box.querySelectorAll('.vmatch').forEach(function(el){el.onclick=function(){VPICK=VRES[+el.getAttribute('data-i')];box.querySelectorAll('.vmatch').forEach(function(x){x.style.borderColor='var(--line)';x.style.background='';});el.style.borderColor='var(--brand)';el.style.background='#ecfdf5';};});
