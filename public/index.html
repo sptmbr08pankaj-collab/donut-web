@@ -1901,7 +1901,7 @@ function openDrill(metric,pocOverride){
       return '<tr><td style="text-align:left">'+esc(v.customer_name||'')+'</td><td style="text-align:left">'+esc(payPoc(v))+'</td><td style="text-align:left">'+esc(String(v.date||'').slice(0,10))+'</td><td style="text-align:left">'+esc(v.mode||'')+'</td><td style="text-align:left">'+esc(v.payment_number||v.invoice_number||'')+'</td><td>'+fmtINR(a)+'</td></tr>';}).join('');
     const phead='<tr><th style="text-align:left">Customer</th><th style="text-align:left">POC</th><th style="text-align:left">Date</th><th style="text-align:left">Mode</th><th style="text-align:left">Ref</th><th>Amount received</th></tr>';
     const pfoot='<tr style="font-weight:700;border-top:2px solid var(--line)"><td style="text-align:left" colspan="5">'+plist.length+' payment(s)</td><td>'+fmtINR(psum)+'</td></tr>';
-    $('drillTitle').textContent='Realized revenue · '+periodLabel();
+    $('drillTitle').textContent=(pocOverride?(pocOverride+' — '):'')+'Realized revenue · '+periodLabel();
     $('drillBody').innerHTML=plist.length?('<div class="panel" style="overflow-x:auto"><table>'+phead+prows+pfoot+'</table></div><div class="note">Payments received in Zoho (by payment date), attributed to the POC on the customer’s quotation.</div>'):'<div class="empty">No payments received for this selection in this period.</div>';
     $('drillModal').style.display='flex';return;
   }
@@ -1942,10 +1942,11 @@ function pocTable(){
   $('pocTable').querySelector('tbody').innerHTML=rows.map(function(r){var me=window.__DONUT_POC&&String(r.name||'').trim().toLowerCase()===String(window.__DONUT_POC).trim().toLowerCase();
     return '<tr data-poc="'+esc(r.name)+'"'+(me?' style="background:#eaf2ff;font-weight:600"':'')+'><td>'+(me?'★ ':'')+esc(r.name)+'</td><td>'+r.count+'</td><td>'+fmtINR(r.quoted)+'</td>'+
     '<td><div class="barwrap"><span class="bar" style="width:'+Math.round(60*r.accepted/maxAcc)+'px"></span><span>'+fmtINR(r.accepted)+'</span></div></td>'+
-    '<td>'+fmtINR(r.realized)+'</td><td data-outpoc="'+esc(r.name)+'" title="Click to see the due invoices" style="cursor:pointer;text-decoration:underline dotted;'+(r.outstanding>0?'color:var(--danger);font-weight:600':'')+'">'+fmtINR(r.outstanding)+'</td>'+
+    '<td data-realpoc="'+esc(r.name)+'" title="Click to see received payments" style="cursor:pointer;text-decoration:underline dotted">'+fmtINR(r.realized)+'</td><td data-outpoc="'+esc(r.name)+'" title="Click to see the due invoices" style="cursor:pointer;text-decoration:underline dotted;'+(r.outstanding>0?'color:var(--danger);font-weight:600':'')+'">'+fmtINR(r.outstanding)+'</td>'+
     '<td>'+fmtINR(r.aov)+'</td><td>'+r.custA+'</td><td>'+fmtINR(r.disc)+'</td><td>'+(r.discCount?r.avgDisc.toFixed(1)+'%':'—')+'</td></tr>';}).join('')||'<tr><td colspan="10" class="empty">No quotations in this period</td></tr>';
   $('pocTable').querySelector('thead').querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(SORT.key===k)SORT.dir*=-1;else{SORT.key=k;SORT.dir=-1;}pocTable();});
   $('pocTable').querySelectorAll('td[data-outpoc]').forEach(td=>td.onclick=function(e){e.stopPropagation();openOutDrill(td.getAttribute('data-outpoc'));});
+  $('pocTable').querySelectorAll('td[data-realpoc]').forEach(td=>td.onclick=function(e){e.stopPropagation();openDrill('realized',td.getAttribute('data-realpoc'));});
   $('pocTable').querySelectorAll('tbody tr[data-poc]').forEach(tr=>tr.onclick=()=>openDrill('count',tr.getAttribute('data-poc')));}
 function adjLabel(key){return String(key).indexOf('inv:')===0?('Invoice '+String(key).slice(4)):key;}
 function openAdjust(key,label,defAmt){const a=adjOf(key);
