@@ -1471,7 +1471,7 @@ function deleteQuote(){if(!STATE.cur.saved){newQuote();return;}if(!confirm('Dele
 let flashTimer=null;
 function flash(msg,bad){const b=$('statusBanner');b.innerHTML=esc(msg).replace('&amp;','&');b.style.background=bad?'#fef2f2':'#ecfdf5';b.style.color=bad?'#991b1b':'#065f46';b.style.borderColor=bad?'#fecaca':'#a7f3d0';b.className='banner show';clearTimeout(flashTimer);flashTimer=setTimeout(()=>{b.className='banner';},4200);}
 /* ---------- Voice command (rule-based, browser SpeechRecognition) ---------- */
-var VTEXT='',VPARSED=null,vrec=null;
+var VTEXT='',VPARSED=null,vrec=null,VPICK=null,VRES=[];
 function vTermOf(n){n=String(n).toLowerCase();if(/year|annual/.test(n))return 'year';if(/quarter|quater/.test(n))return 'quarter';if(/month/.test(n))return 'month';return '';}
 function vToks(s,stop){return String(s).toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(function(w){return w&&!stop[w];});}
 function parseVoice(raw){
@@ -1493,35 +1493,50 @@ function parseVoice(raw){
 }
 function voicePreview(){const p=parseVoice(VTEXT);VPARSED=p;
   const rows=[['Plan',p.planName||'—'],['Add-ons',p.addons.length?p.addons.map(function(a){return a.name;}).join(', '):'—'],['Discount',p.discount!=null?(p.discount+'%'):'—'],['State',p.state||'—'],['Tax',p.taxMode==='inter'?'IGST':(p.taxMode==='intra'?'CGST + SGST':'—')]];
-  $('voiceParsed').innerHTML='<div style="font-weight:600;font-size:12px;margin-bottom:6px">Understood (edit the customer if needed):</div>'+
-    '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f1f5f9"><span style="color:#64748b;min-width:74px;font-size:13px">Customer</span><input id="voiceCust" value="'+esc(p.customer)+'" placeholder="(say or type the customer)" style="flex:1;font:inherit;border:1px solid var(--line);border-radius:7px;padding:5px 8px"></div>'+
+  $('voiceParsed').innerHTML='<div style="font-weight:600;font-size:12px;margin-bottom:6px">Understood:</div>'+
+    '<div style="display:flex;align-items:center;gap:6px;padding:4px 0"><span style="color:#64748b;min-width:64px;font-size:13px">Customer</span><input id="voiceCust" value="'+esc(p.customer)+'" placeholder="name / hotel / email / phone" style="flex:1;font:inherit;border:1px solid var(--line);border-radius:7px;padding:5px 8px"><button id="voiceCustSearch" class="ghost" style="padding:5px 10px">🔎 Search HubSpot</button></div>'+
+    '<div id="voiceCustMatches" style="margin:4px 0 10px"></div>'+
     rows.map(function(r){return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">'+r[0]+'</span><b>'+esc(r[1])+'</b></div>';}).join('');
+  if($('voiceCustSearch'))$('voiceCustSearch').onclick=voiceSearchCust;
   $('voiceApply').disabled=!(p.customer||p.planIdx>=0||p.addons.length||p.discount!=null||p.state||p.taxMode);
+}
+async function voiceSearchCust(){
+  const q=($('voiceCust')?$('voiceCust').value.trim():'');VPICK=null;VRES=[];
+  const box=$('voiceCustMatches');if(!box)return;
+  if(q.length<2){box.innerHTML='<div class="hint" style="font-size:12px">Type or say at least 2 characters, then Search.</div>';return;}
+  box.innerHTML='<div class="hint" style="font-size:12px">Searching HubSpot…</div>';
+  try{
+    const obj=await call(HUBSPOT+'__search_crm_objects',{objectType:'contacts',query:q,limit:8,properties:['firstname','lastname','email','phone','city','state','property_state','pincode','zip','hubspot_owner_id','hotel_name','hotel_name_enriched','enrichment_hotel_name','referred_hotel_name','digistay_room_count','number_of_rooms','number_of_rooms_in_your_hotel','property_rooms','property_name','whats_your_property_type'],chatInsights:{userIntent:'Voice: look up a customer to build a quotation',satisfaction:'NEUTRAL'}});
+    const res=(obj&&obj.results)||(obj&&obj.data&&obj.data.results)||[];VRES=res;
+    if(!res.length){box.innerHTML='<div class="hint" style="font-size:12px">No HubSpot contact found — it will be added as a new name on Apply.</div>';return;}
+    box.innerHTML='<div style="font-size:12px;color:#64748b;margin:2px 0 5px">Pick the matching lead:</div>'+res.map(function(r,idx){const p=r.properties||{};const nm=((p.firstname||'')+' '+(p.lastname||'')).trim()||p.email||'(no name)';const hot=firstVal(p.hotel_name,p.property_name,p.hotel_name_enriched,p.enrichment_hotel_name,p.referred_hotel_name);return '<div class="vmatch" data-i="'+idx+'" style="border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin-bottom:5px;cursor:pointer"><div style="font-weight:600;font-size:13px">'+esc(nm)+(hot?(' · '+esc(hot)):'')+'</div><div style="font-size:12px;color:#64748b">'+esc(p.email||'no email')+' · '+esc(p.phone||'')+' · '+esc([p.city,p.state].filter(Boolean).join(', '))+'</div></div>';}).join('');
+    box.querySelectorAll('.vmatch').forEach(function(el){el.onclick=function(){VPICK=VRES[+el.getAttribute('data-i')];box.querySelectorAll('.vmatch').forEach(function(x){x.style.borderColor='var(--line)';x.style.background='';});el.style.borderColor='var(--brand)';el.style.background='#ecfdf5';};});
+  }catch(e){box.innerHTML='<div class="hint" style="font-size:12px;color:var(--danger)">⚠ '+esc(e.message)+'</div>';}
 }
 function voiceStart(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('voiceState').textContent='Voice input is not supported here — use Chrome or Edge.';return;}
   vrec=new SR();vrec.lang='en-IN';vrec.interimResults=true;vrec.continuous=true;let fin='';
   $('voiceState').textContent='Listening… speak, then click Stop.';$('voiceStart').textContent='■ Stop';$('voiceStart').onclick=voiceStop;
   vrec.onresult=function(e){let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=t+' ';else interim+=t;}VTEXT=(fin+interim).trim();$('voiceText').textContent=VTEXT;voicePreview();};
   vrec.onerror=function(e){$('voiceState').textContent='Mic error: '+(e.error||'unknown')+(e.error==='not-allowed'?' — allow microphone access.':'');};
-  vrec.onend=function(){$('voiceStart').textContent='● Start listening';$('voiceStart').onclick=voiceStart;$('voiceState').textContent='Stopped. Review below, then Apply.';};
+  vrec.onend=function(){$('voiceStart').textContent='● Start listening';$('voiceStart').onclick=voiceStart;$('voiceState').textContent='Stopped. Pick the HubSpot lead, then Apply.';if(VPARSED&&VPARSED.customer)voiceSearchCust();};
   try{vrec.start();}catch(e){}
 }
 function voiceStop(){if(vrec){try{vrec.stop();}catch(e){}}}
-function openVoice(){VTEXT='';VPARSED=null;$('voiceText').textContent='';$('voiceParsed').innerHTML='';$('voiceApply').disabled=true;$('voiceState').textContent='Click “Start” and say the customer, plan, add-ons, discount, state and tax type.';$('voiceStart').textContent='● Start listening';$('voiceStart').onclick=voiceStart;$('voiceModal').style.display='flex';}
+function openVoice(){VTEXT='';VPARSED=null;VPICK=null;VRES=[];$('voiceText').textContent='';$('voiceParsed').innerHTML='';$('voiceApply').disabled=true;$('voiceState').textContent='Click “Start” and say the customer, plan, add-ons, discount, state and tax type.';$('voiceStart').textContent='● Start listening';$('voiceStart').onclick=voiceStart;$('voiceModal').style.display='flex';}
 function closeVoice(){voiceStop();$('voiceModal').style.display='none';}
 function applyVoice(){const p=VPARSED;if(!p)return;voiceStop();
-  const cust=($('voiceCust')?$('voiceCust').value.trim():'')||p.customer;p.customer=cust;
-  if(cust)$('custName').value=cust;
-  if(p.state){$('custState').value=p.state;STATE.cur._stateManual=true;}
-  if(p.taxMode)$('taxMode').value=p.taxMode;
-  syncStateFromForm();
-  if(!p.taxMode&&p.state)resolveTax();
+  if(VPICK){selectCustomer(VPICK);} // import the chosen HubSpot lead (name/email/phone/state/rooms + hubspotId)
+  else{const cust=($('voiceCust')?$('voiceCust').value.trim():'')||p.customer;if(cust)$('custName').value=cust;syncStateFromForm();}
+  if(p.state){$('custState').value=p.state;STATE.cur.customer.state=p.state;STATE.cur._stateManual=true;}
+  if(p.taxMode){$('taxMode').value=p.taxMode;STATE.cur.taxMode=p.taxMode;}
+  if(!p.taxMode&&(p.state||VPICK))resolveTax();
   if(p.planIdx>=0)addPlan(p.planIdx);
   (p.addons||[]).forEach(function(a){addAddon(a.i);});
   if(p.discount!=null){if($('discPctInput'))$('discPctInput').value=p.discount;applyDiscPct(p.discount);}
   markDirty();render();
   $('voiceModal').style.display='none';
-  flash('🎤 Applied: '+[p.customer?('customer '+p.customer):'',p.planName||'',(p.addons||[]).map(function(a){return a.name;}).join(', '),p.discount!=null?(p.discount+'%'):'',p.state||'',p.taxMode?(p.taxMode==='inter'?'IGST':'CGST+SGST'):''].filter(Boolean).join(' · '));
+  const cn=VPICK?('linked '+(((VPICK.properties&&((VPICK.properties.firstname||'')+' '+(VPICK.properties.lastname||'')).trim()))||p.customer)):(($('voiceCust')&&$('voiceCust').value.trim())?('customer '+$('voiceCust').value.trim()):'');
+  flash('🎤 Applied: '+[cn,p.planName||'',(p.addons||[]).map(function(a){return a.name;}).join(', '),p.discount!=null?(p.discount+'%'):'',p.state||''].filter(Boolean).join(' · '));
 }
 
 /* ---------- wire up ---------- */
