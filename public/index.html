@@ -1499,10 +1499,9 @@ function parseVoice(raw){
 function voicePreview(){const p=parseVoice(VTEXT);VPARSED=p;
   const rows=[['Plan',p.planName||'—'],['Add-ons',p.addons.length?p.addons.map(function(a){return a.name;}).join(', '):'—'],['Discount',p.discount!=null?(p.discount+'%'):'—'],['State',p.state||'—'],['Tax',p.taxMode==='inter'?'IGST':(p.taxMode==='intra'?'CGST + SGST':'—')]];
   $('voiceParsed').innerHTML='<div style="font-weight:600;font-size:12px;margin-bottom:6px">Understood:</div>'+
-    '<div style="display:flex;align-items:center;gap:6px;padding:4px 0"><span style="color:#64748b;min-width:64px;font-size:13px">Customer</span><input id="voiceCust" value="'+esc(p.customer)+'" placeholder="name / hotel / email / phone" style="flex:1;font:inherit;border:1px solid var(--line);border-radius:7px;padding:5px 8px"><button id="voiceCustSearch" class="ghost" style="padding:5px 10px">🔎 Search HubSpot</button></div>'+
-    '<div id="voiceCustMatches" style="margin:4px 0 10px"></div>'+
+    '<div style="display:flex;align-items:center;gap:6px;padding:4px 0"><span style="color:#64748b;min-width:64px;font-size:13px">Customer</span><input id="voiceCust" value="'+esc(p.customer)+'" placeholder="name / hotel / email / phone" style="flex:1;font:inherit;border:1px solid var(--line);border-radius:7px;padding:5px 8px"></div>'+
+    '<div class="hint" style="font-size:11px;margin:2px 0 10px">↑ On Apply this is typed into the customer “Find customer” search bar and searched in HubSpot — pick the lead from the dropdown. Nothing is written to the Customer/Hotel name field.</div>'+
     rows.map(function(r){return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;border-bottom:1px solid #f1f5f9"><span style="color:#64748b">'+r[0]+'</span><b>'+esc(r[1])+'</b></div>';}).join('');
-  if($('voiceCustSearch'))$('voiceCustSearch').onclick=voiceSearchCust;
   $('voiceApply').disabled=!(p.customer||p.planIdx>=0||p.addons.length||p.discount!=null||p.state||p.taxMode);
 }
 async function voiceSearchCust(){
@@ -1528,25 +1527,27 @@ function voiceStart(){const SR=window.SpeechRecognition||window.webkitSpeechReco
   $('voiceState').textContent='Listening… speak, then click Stop.';$('voiceStart').textContent='■ Stop';$('voiceStart').onclick=voiceStop;
   vrec.onresult=function(e){let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=t+' ';else interim+=t;}VTEXT=(fin+interim).trim();$('voiceText').textContent=VTEXT;voicePreview();};
   vrec.onerror=function(e){$('voiceState').textContent='Mic error: '+(e.error||'unknown')+(e.error==='not-allowed'?' — allow microphone access.':'');};
-  vrec.onend=function(){$('voiceStart').textContent='● Start listening';$('voiceStart').onclick=voiceStart;$('voiceState').textContent='Stopped. Pick the HubSpot lead, then Apply.';if(VPARSED&&VPARSED.customer)voiceSearchCust();};
+  vrec.onend=function(){$('voiceStart').textContent='● Start listening';$('voiceStart').onclick=voiceStart;$('voiceState').textContent='Stopped. Review below, then Apply.';};
   try{vrec.start();}catch(e){}
 }
 function voiceStop(){if(vrec){try{vrec.stop();}catch(e){}}}
 function openVoice(){VTEXT='';VPARSED=null;VPICK=null;VRES=[];$('voiceText').textContent='';$('voiceParsed').innerHTML='';$('voiceApply').disabled=true;$('voiceState').textContent='Click “Start” and say the customer, plan, add-ons, discount, state and tax type.';$('voiceStart').textContent='● Start listening';$('voiceStart').onclick=voiceStart;$('voiceModal').style.display='flex';}
 function closeVoice(){voiceStop();$('voiceModal').style.display='none';}
 function applyVoice(){const p=VPARSED;if(!p)return;voiceStop();
-  if(VPICK){selectCustomer(VPICK);} // import the chosen HubSpot lead (name/email/phone/state/rooms + hubspotId)
-  else{const cust=($('voiceCust')?$('voiceCust').value.trim():'')||p.customer;if(cust)$('custName').value=cust;syncStateFromForm();}
-  if(p.state){$('custState').value=p.state;STATE.cur.customer.state=p.state;STATE.cur._stateManual=true;}
-  if(p.taxMode){$('taxMode').value=p.taxMode;STATE.cur.taxMode=p.taxMode;}
-  if(!p.taxMode&&(p.state||VPICK))resolveTax();
+  const q=($('voiceCust')?$('voiceCust').value.trim():'')||p.customer||'';
+  // Apply plan/add-ons/discount/state/tax — but NOT the customer name.
+  if(p.state){$('custState').value=p.state;STATE.cur._stateManual=true;}
+  if(p.taxMode)$('taxMode').value=p.taxMode;
+  syncStateFromForm();
+  if(!p.taxMode&&p.state)resolveTax();
   if(p.planIdx>=0)addPlan(p.planIdx);
   (p.addons||[]).forEach(function(a){addAddon(a.i);});
   if(p.discount!=null){if($('discPctInput'))$('discPctInput').value=p.discount;applyDiscPct(p.discount);}
   markDirty();render();
   $('voiceModal').style.display='none';
-  const cn=VPICK?('linked '+(((VPICK.properties&&((VPICK.properties.firstname||'')+' '+(VPICK.properties.lastname||'')).trim()))||p.customer)):(($('voiceCust')&&$('voiceCust').value.trim())?('customer '+$('voiceCust').value.trim()):'');
-  flash('🎤 Applied: '+[cn,p.planName||'',(p.addons||[]).map(function(a){return a.name;}).join(', '),p.discount!=null?(p.discount+'%'):'',p.state||''].filter(Boolean).join(' · '));
+  // Route the spoken customer into the HubSpot "Find customer" search bar (do NOT fill Customer/Hotel name).
+  if(q&&$('custSearch')){$('custSearch').value=q;try{$('custSearch').focus();doCustSearch(q);}catch(e){}}
+  flash('🎤 Applied: '+[p.planName||'',(p.addons||[]).map(function(a){return a.name;}).join(', '),p.discount!=null?(p.discount+'%'):'',p.state||''].filter(Boolean).join(' · ')+(q?(' · searching HubSpot for “'+q+'” — pick the lead'):''));
 }
 
 /* ---------- wire up ---------- */
