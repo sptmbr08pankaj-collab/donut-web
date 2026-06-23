@@ -530,14 +530,19 @@ const GMAIL='mcp__58de8fc0-38b2-41af-9a9e-e79d80500208';
 const ORG='60062278723';
 const DB_KEY='digistay_quotes_v1';
 const SELLER_KEY='digistay_seller_v2';
-const CAT_KEY='digistay_catalog_v10_billing';
+const CAT_KEY='digistay_catalog_v11_billing';
 const POC_KEY='digistay_lastpoc';
 const USER_KEY='digistay_user_v1';
 const SCAN_CAP=500;
 // Books items hidden from the catalog (obsolete/placeholder). Matched by id, with name fallback.
 const EXCLUDE_ITEM_IDS=['3296275000000249015','3296275000001314166','3296275000002501738'];
 const EXCLUDE_ITEM_NAMES=['current plan','website','quaterly plan services','quarterly plan services'];
-function bookExcluded(it){return EXCLUDE_ITEM_IDS.indexOf(it.item_id)>=0||EXCLUDE_ITEM_NAMES.indexOf(String(it.name||'').trim().toLowerCase())>=0;}
+// Permanently hidden from the Quote Builder catalog (plans / add-ons / services). Applied on every live
+// Zoho Billing refresh so these never reappear. Compared with hyphens & extra spaces normalised away.
+function catNorm(s){return String(s||'').toLowerCase().replace(/[-\s]+/g,' ').trim();}
+const BLOCKED_CATALOG=new Set(['pro quarterly','core quarter','quarterly plan','connect quarter','connect half yearly','connect yearly','half yearly plan','annual plan','core half yearly','core yearly','custom website'].map(catNorm));
+function catBlocked(name){return BLOCKED_CATALOG.has(catNorm(name));}
+function bookExcluded(it){return EXCLUDE_ITEM_IDS.indexOf(it.item_id)>=0||EXCLUDE_ITEM_NAMES.indexOf(String(it.name||'').trim().toLowerCase())>=0||catBlocked(it.name);}
 const $=id=>document.getElementById(id);
 
 const SELLER_DEFAULT={name:'Openquest Tech Private Limited',gstin:'05AAECO5584C1ZJ',
@@ -706,8 +711,8 @@ async function fetchBillingCatalog(){
   const rawAddons=await fetchBillingList('list_addons','addons');
   const rawCoupons=await fetchBillingList('list_coupons','coupons');
   const dedup=arr=>{const seen={},out=[];arr.forEach(x=>{const k=normName(x.name);if(!k||seen[k])return;seen[k]=1;out.push(x);});return out;};
-  const plans=rawPlans.filter(p=>p.status==='active').map(p=>({item_id:String(p.plan_id||''),code:p.plan_code||'',name:String(p.name||'').trim(),rate:Number(p.recurring_price)||0,desc:p.description||'',gst:_taxPct(p),unit:p.interval_unit||'',type:1}));
-  const addons=rawAddons.filter(a=>a.status==='active').map(a=>({item_id:String(a.addon_id||''),code:a.addon_code||'',name:String(a.name||'').trim(),rate:Number(a.price_brackets&&a.price_brackets[0]&&a.price_brackets[0].price)||0,desc:a.description||'',gst:_taxPct(a),unit:a.interval_unit||'',type:2}));
+  const plans=rawPlans.filter(p=>p.status==='active'&&!catBlocked(p.name)).map(p=>({item_id:String(p.plan_id||''),code:p.plan_code||'',name:String(p.name||'').trim(),rate:Number(p.recurring_price)||0,desc:p.description||'',gst:_taxPct(p),unit:p.interval_unit||'',type:1}));
+  const addons=rawAddons.filter(a=>a.status==='active'&&!catBlocked(a.name)).map(a=>({item_id:String(a.addon_id||''),code:a.addon_code||'',name:String(a.name||'').trim(),rate:Number(a.price_brackets&&a.price_brackets[0]&&a.price_brackets[0].price)||0,desc:a.description||'',gst:_taxPct(a),unit:a.interval_unit||'',type:2}));
   const coupons=rawCoupons.filter(c=>c.status==='active').map(c=>({code:c.coupon_code,name:c.name||c.coupon_code,percent:(c.discount_by==='percentage')?(Number(c.discount_value)||0):0,amount:(c.discount_by!=='percentage')?(Number(c.discount_value)||0):0}));
   return {plans:dedup(plans),addons:dedup(addons),coupons:coupons};
 }
