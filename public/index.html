@@ -1179,7 +1179,6 @@ function buildEmailHtml(){
 }
 async function emailQuote(){
   const q=STATE.cur,c=q.customer;
-  if(!c.email){flash('Add a customer email first — Zoho sends the estimate to that address.',true);return;}
   if(!q.lines.length){flash('Add at least one plan/service before sending.',true);return;}
   const btn=$('emailBtn'),old=btn.textContent;btn.disabled=true;btn.textContent='Sending via Zoho…';
   await syncExternal({zoho:true,hubspot:true,sent:true,silent:true});
@@ -1464,8 +1463,6 @@ function newQuote(){STATE.cur=blankQuote();syncFormFromState();computeStep();ren
 // Gate before any save/send: a customer must be selected AND at least one plan/add-on/service must be added.
 function quoteReady(){syncStateFromForm();const c=STATE.cur.customer;
   if(!String(c.name||'').trim()){flash('Add a customer first — select or enter the customer before the quotation can be saved or sent.',true);return false;}
-  if(!String(c.email||'').trim()){flash('Add the customer’s email — the quotation cannot be saved or sent without it.',true);return false;}
-  if(!String(c.phone||'').trim()){flash('Add the customer’s phone number — the quotation cannot be saved or sent without it.',true);return false;}
   if(!STATE.cur.lines.length){flash('Add at least one plan, add-on or service before the quotation can be saved or sent.',true);return false;}
   return true;}
 function saveQuote(){if(!quoteReady())return;
