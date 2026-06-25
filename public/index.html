@@ -1285,30 +1285,50 @@ async function pushToZoho(q,markSent){
   const pcCode=stateCode(q.customer.state);
   if(cid&&pcCode){try{const upd={place_of_contact:pcCode};if(q.customer.gstin){upd.gst_treatment='business_gst';upd.gst_no=q.customer.gstin;}await call(ZOHO+'__update_contact',{path_variables:{contact_id:cid},body:upd});}catch(e){}}
   const cpid=await getZohoContactPersonId(q);
-  function makeBody(sub){
+  function makeBody(sub,noCoupon){
     const lines=buildZohoLines(q,sub);if(!lines.length)throw new Error('no items');
     const body={customer_id:cid,date:q.date,reference_number:'',notes:q.notes||'',terms:q.terms||'',line_items:lines,is_discount_before_tax:true,auto_collect:false};
-    if(sub){const term=periodOf(planLine.name,planLine.unit);body.estimate_type='new_subscription';body.interval_unit=(term==='year')?'years':'months';}
+    if(sub){const term=periodOf(planLine.name,planLine.unit);body.estimate_type='new_subscription';body.interval_unit=(term==='year')?'years':'months';
+      // A subscription accepts only a coupon-based discount (a custom discount makes Zoho reject later edits).
+      // Apply the coupon the POC picked in Donut's coupon dropdown; a typed % is not pushed to a subscription.
+      if(!noCoupon&&q.coupon&&q.coupon.code)body.coupon_code=q.coupon.code;
+    }else{
+      // Regular Quote (add-ons / services only): a custom entity-level discount is allowed.
+      body.discount=t.overall>0?Number(t.overall.toFixed(2)):0;body.discount_type='entity_level';
+    }
     const pc=stateCode(q.customer.state);if(pc)body.place_of_supply=pc;
     if(q.poc)body.salesperson_name=q.poc;
     if(q.validUntil)body.expiry_date=q.validUntil;
     // Attach the contact person with email enabled so send:true has a recipient.
     if(cpid)body.contact_persons_associated=[{contact_person_id:cpid,communication_preference:{is_email_enabled:true}}];
-    body.discount=t.overall>0?Number(t.overall.toFixed(2)):0;body.discount_type='entity_level';
     return body;
   }
-  // Zoho rejects a subscription estimate that mixes the plan with a non-subscription (ad-hoc) line (code 8009).
-  // If that happens we retry as a regular Quote so the save still succeeds.
-  function isSubMix(e){return /standalone|subscription item|not associated|associated with the plan|8009/i.test(String((e&&e.message)||''));}
-  async function createNew(send){
-    let sub=wantSub;
-    let r;
-    try{r=await call(ZOHO+'__create_estimate',{query_params:{organization_id:ORG,send:!!send},body:makeBody(sub)});}
-    catch(e){if(sub&&isSubMix(e)){sub=false;r=await call(ZOHO+'__create_estimate',{query_params:{organization_id:ORG,send:!!send},body:makeBody(sub)});}else throw e;}
-    const est=(r&&r.data&&r.data.estimate)||(r&&r.estimate);
-    if(!est||!est.estimate_id)throw new Error((r&&r.data&&r.data.message)||'create failed');
-    q.zohoEstimateId=est.estimate_id;q.zohoEstimateNumber=est.estimate_number||'';q.zohoEstimateUrl=est.estimate_url||q.zohoEstimateUrl||'';q.zohoIsSub=sub;return est;
+  // A coupon that isn't tied to the plan/add-on => drop the coupon and retry. A mixed/unassociated line
+  // (8009 / "selected addon not associated") => retry as a regular Quote. Both keep the save from hard-failing.
+  function isCouponErr(e){return /coupon/i.test(String((e&&e.message)||''));}
+  function isSubMix(e){return /standalone|subscription item|selected addon|not associated|8009/i.test(String((e&&e.message)||''));}
+  async function writeEstimate(send,isUpdate){
+    let sub=wantSub,noCoupon=false;
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        if(isUpdate){
+          await call(ZOHO+'__update_estimate',{path_variables:{estimate_id:q.zohoEstimateId},query_params:{organization_id:ORG},body:Object.assign({custom_fields:[]},makeBody(sub,noCoupon))});
+          q.zohoIsSub=sub;q.zohoCouponSkipped=!!(sub&&noCoupon&&q.coupon&&q.coupon.code);return true;
+        }
+        const r=await call(ZOHO+'__create_estimate',{query_params:{organization_id:ORG,send:!!send},body:makeBody(sub,noCoupon)});
+        const est=(r&&r.data&&r.data.estimate)||(r&&r.estimate);
+        if(!est||!est.estimate_id)throw new Error((r&&r.data&&r.data.message)||'create failed');
+        q.zohoEstimateId=est.estimate_id;q.zohoEstimateNumber=est.estimate_number||'';q.zohoEstimateUrl=est.estimate_url||q.zohoEstimateUrl||'';
+        q.zohoIsSub=sub;q.zohoCouponSkipped=!!(sub&&noCoupon&&q.coupon&&q.coupon.code);return est;
+      }catch(e){
+        if(sub&&!noCoupon&&isCouponErr(e)){noCoupon=true;continue;}
+        if(sub&&isSubMix(e)){sub=false;noCoupon=false;continue;}
+        throw e;
+      }
+    }
+    throw new Error(isUpdate?'update failed':'create failed');
   }
+  async function createNew(send){return await writeEstimate(send,false);}
   // Send => deliver a fresh emailed estimate, replacing the previous one. If Zoho can't email, keep it as a saved draft.
   if(markSent){
     q.zohoEmailed=false;q.zohoSendError='';
@@ -1334,8 +1354,7 @@ async function pushToZoho(q,markSent){
     if(q.zohoStatus!=='sent'&&q.zohoStatus!=='paid')q.zohoStatus='draft';
     return est;
   }
-  try{await call(ZOHO+'__update_estimate',{path_variables:{estimate_id:q.zohoEstimateId},query_params:{organization_id:ORG},body:Object.assign({custom_fields:[]},makeBody(wantSub))});q.zohoIsSub=wantSub;}
-  catch(e){if(wantSub&&isSubMix(e)){await call(ZOHO+'__update_estimate',{path_variables:{estimate_id:q.zohoEstimateId},query_params:{organization_id:ORG},body:Object.assign({custom_fields:[]},makeBody(false))});q.zohoIsSub=false;}else throw e;}
+  await writeEstimate(false,true);
   if(q.zohoStatus!=='sent'&&q.zohoStatus!=='paid')q.zohoStatus='draft';
   return true;
 }
@@ -1391,7 +1410,11 @@ async function syncExternal(opts){
   }
   if(opts.zoho){
     if(!STATE.cur.lines.length)out.push('Zoho skipped — add a plan or service first');
-    else{try{await pushToZoho(STATE.cur,!!opts.sent);out.push('Zoho '+(STATE.cur.zohoEstimateNumber||'')+' '+(STATE.cur.zohoStatus==='sent'?'(Sent)':(STATE.cur.zohoStatus==='paid'?'(Paid)':'(Draft)'))+' ✓');}catch(e){out.push('Zoho ✗ '+e.message);}}
+    else{try{await pushToZoho(STATE.cur,!!opts.sent);out.push('Zoho '+(STATE.cur.zohoEstimateNumber||'')+' '+(STATE.cur.zohoStatus==='sent'?'(Sent)':(STATE.cur.zohoStatus==='paid'?'(Paid)':'(Draft)'))+' ✓');
+      const cq=STATE.cur,hasPlan=(cq.lines||[]).some(l=>l.kind==='plan'),wantDisc=(Number(cq.overallDiscValue)||0)>0||(cq.coupon&&cq.coupon.code);
+      if(hasPlan&&wantDisc&&!(cq.coupon&&cq.coupon.code))out.push('⚠ Discount not applied — pick a coupon to discount a plan (subscription) quote in Zoho');
+      else if(hasPlan&&cq.zohoCouponSkipped)out.push('⚠ Coupon '+(cq.coupon&&cq.coupon.code||'')+' isn’t valid for this plan in Zoho — discount not applied');
+    }catch(e){out.push('Zoho ✗ '+e.message);}}
   }
   persistCur();refreshQuoteSelect();render();
   const msg=out.join('  ·  ');setSync(msg,false);
