@@ -530,7 +530,7 @@ const GMAIL='mcp__58de8fc0-38b2-41af-9a9e-e79d80500208';
 const ORG='60062278723';
 const DB_KEY='digistay_quotes_v1';
 const SELLER_KEY='digistay_seller_v2';
-const CAT_KEY='digistay_catalog_v11_billing';
+const CAT_KEY='digistay_catalog_v12_billing';
 const POC_KEY='digistay_lastpoc';
 const USER_KEY='digistay_user_v1';
 const SCAN_CAP=500;
@@ -712,7 +712,7 @@ async function fetchBillingCatalog(){
   const rawCoupons=await fetchBillingList('list_coupons','coupons');
   const dedup=arr=>{const seen={},out=[];arr.forEach(x=>{const k=normName(x.name);if(!k||seen[k])return;seen[k]=1;out.push(x);});return out;};
   const plans=rawPlans.filter(p=>p.status==='active'&&!catBlocked(p.name)).map(p=>({item_id:String(p.plan_id||''),code:p.plan_code||'',name:String(p.name||'').trim(),rate:Number(p.recurring_price)||0,desc:p.description||'',gst:_taxPct(p),unit:p.interval_unit||'',type:1}));
-  const addons=rawAddons.filter(a=>a.status==='active'&&!catBlocked(a.name)).map(a=>({item_id:String(a.addon_id||''),code:a.addon_code||'',name:String(a.name||'').trim(),rate:Number(a.price_brackets&&a.price_brackets[0]&&a.price_brackets[0].price)||0,desc:a.description||'',gst:_taxPct(a),unit:a.interval_unit||'',type:2}));
+  const addons=rawAddons.filter(a=>a.status==='active'&&!catBlocked(a.name)).map(a=>({item_id:String(a.addon_id||''),code:a.addon_code||'',name:String(a.name||'').trim(),rate:Number(a.price_brackets&&a.price_brackets[0]&&a.price_brackets[0].price)||0,desc:a.description||'',gst:_taxPct(a),unit:a.interval_unit||'',type:2,allPlans:!!a.applicable_to_all_plans,planCodes:(a.plans||[]).map(p=>p&&(p.plan_code||p)).filter(Boolean)}));
   const coupons=rawCoupons.filter(c=>c.status==='active').map(c=>({code:c.coupon_code,name:c.name||c.coupon_code,percent:(c.discount_by==='percentage')?(Number(c.discount_value)||0):0,amount:(c.discount_by!=='percentage')?(Number(c.discount_value)||0):0}));
   return {plans:dedup(plans),addons:dedup(addons),coupons:coupons};
 }
@@ -749,7 +749,11 @@ function hasPlan(){return STATE.cur.lines.some(l=>l.kind==='plan');}
 function isRoomLicense(name){return /additional\s*room\s*license/i.test(String(name||''));}
 function unitPeriod(u){u=String(u||'').toLowerCase();if(u.indexOf('year')>=0)return 'year';if(u.indexOf('quarter')>=0||u.indexOf('quater')>=0)return 'quarter';if(u.indexOf('month')>=0)return 'month';return '';}
 function periodOf(name,unit){const s=String(name||'').toLowerCase();if(/year|annual/.test(s))return 'year';if(/quarter|quater/.test(s))return 'quarter';if(/month/.test(s))return 'month';return unitPeriod(unit);}
-function lineFrom(e,kind){return {itemId:e.itemId||e.item_id||'',name:e.name,desc:e.desc||'',rate:Number(e.rate)||0,qty:1,perRoom:false,discountPct:0,gst:Number(e.gst)||18,unit:e.unit||'',kind:kind,_open:false};}
+function lineFrom(e,kind){return {itemId:e.itemId||e.item_id||'',code:e.code||'',name:e.name,desc:e.desc||'',rate:Number(e.rate)||0,qty:1,perRoom:false,discountPct:0,gst:Number(e.gst)||18,unit:e.unit||'',kind:kind,_open:false};}
+// Plan/add-on association: an add-on can only go on a subscription whose plan it is associated with in Zoho Billing.
+function planCodeOf(planLine){if(!planLine)return '';if(planLine.code)return planLine.code;const p=(STATE.catalog.plans||[]).find(x=>(planLine.itemId&&x.item_id===planLine.itemId)||normName(x.name)===normName(planLine.name));return p?(p.code||''):'';}
+function catAddonOf(l){return (STATE.catalog.addons||[]).find(x=>(l.itemId&&x.item_id===l.itemId)||normName(x.name)===normName(l.name));}
+function addonForPlan(a,planCode){if(!a)return true;if(a.allPlans)return true;if(!planCode)return true;return (a.planCodes||[]).indexOf(planCode)>=0;}
 // Plan tiers: rooms included (Max=20, others=15) and per-extra-room license price by term.
 const BASE_ROOMS={starter:15,connect:15,advance:15,max:20,booster:20};
 const ROOM_ADDON_PRICE={quarter:{starter:200,connect:300,advance:400,max:600,booster:900},year:{starter:600,connect:900,advance:1200,max:2000,booster:2700}};
@@ -850,6 +854,8 @@ function addPlan(i){const e=STATE.catalog.plans[i];if(!e)return;
   let removed=0;
   if(pp)STATE.cur.lines=STATE.cur.lines.filter(l=>{if(l.kind!=='addon')return true;const ap=periodOf(l.name,l.unit);if(ap&&ap!==pp){removed++;return false;}return true;});
   STATE.cur.lines=STATE.cur.lines.filter(l=>{if(l.kind!=='addon')return true;if(isBundled(l.name,e.name)){removed++;return false;}return true;});
+  // Drop add-ons not associated with the newly selected plan (would be rejected by Zoho on a subscription).
+  STATE.cur.lines=STATE.cur.lines.filter(l=>{if(l.kind!=='addon'||isRoomLicense(l.name))return true;const ca=catAddonOf(l);if(!ca)return true;if(addonForPlan(ca,e.code||''))return true;removed++;return false;});
   syncRoomLicense();
   const rl=STATE.cur.lines.find(l=>l.autoRoom);
   STATE.path='plan';STATE.tab='addon';markDirty();renderWizard();renderLines();render();
@@ -858,6 +864,7 @@ function addAddon(i){const e=STATE.catalog.addons[i];if(!e)return;
   const plan=STATE.cur.lines.find(l=>l.kind==='plan');
   if(plan&&isBundled(e.name,plan.name)){flash(e.name+' is already included in the '+(planTier(plan.name)||'')+' plan.',true);return;}
   if(isRoomLicense(e.name)&&!hasPlan()){flash('Select a plan first — room-license add-ons require a plan.',true);return;}
+  if(plan&&!isRoomLicense(e.name)&&!addonForPlan(e,planCodeOf(plan))){flash(e.name+' is not available for the '+(plan.name||'selected plan')+'.',true);return;}
   if(STATE.cur.lines.some(l=>l.kind==='addon'&&((e.item_id&&l.itemId===e.item_id)||normName(l.name)===normName(e.name)))){flash(e.name+' already added — set the quantity in the table below.');renderCatBlocks();return;}
   STATE.cur.lines.push(lineFrom(e,'addon'));markDirty();renderLines();render();renderCatBlocks();}
 function addService(i){const it=STATE.booksCatalog[i];if(!it)return;
@@ -925,6 +932,8 @@ function renderCatBlocks(){
     let items=(STATE.catalog.addons||[]).map((a,i)=>({a:a,i:i}));
     items=items.filter(o=>!isRoomLicense(o.a.name)); // room licenses only appear (auto) once a plan is selected
     if(planLine&&pp)items=items.filter(o=>{const ap=periodOf(o.a.name,o.a.unit);return ap===''||ap===pp;});
+    // Only show add-ons that Zoho associates with the selected plan — prevents "addon not associated with the plan".
+    if(planLine){const pcode=planCodeOf(planLine);items=items.filter(o=>addonForPlan(o.a,pcode));}
     items.sort((x,y)=>addonOrder(x.a,y.a));
     if(planLine&&(pp==='quarter'||pp==='year')){const price=roomAddonPrice(planLine.name,pp),rlName='Additional Room License for '+(pp==='year'?'Year':'Quarter');
       if(price>0&&match(rlName)){const base=planBaseRooms(planLine.name),rooms=Number(q.customer.roomCount)||0,extra=Math.max(0,rooms-base);
@@ -1290,7 +1299,7 @@ async function pushToZoho(q,markSent){
   }
   // Zoho rejects a subscription estimate that mixes the plan with a non-subscription (ad-hoc) line (code 8009).
   // If that happens we retry as a regular Quote so the save still succeeds.
-  function isSubMix(e){return /standalone|subscription item|8009/i.test(String((e&&e.message)||''));}
+  function isSubMix(e){return /standalone|subscription item|not associated|associated with the plan|8009/i.test(String((e&&e.message)||''));}
   async function createNew(send){
     let sub=wantSub;
     let r;
