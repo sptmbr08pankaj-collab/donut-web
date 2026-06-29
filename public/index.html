@@ -1023,14 +1023,21 @@ async function doCustSearch(q){
   $('custLoad').textContent='';
 }
 function selectCustomer(r){
-  const p=r.properties||{},c=STATE.cur.customer;
+  const p=r.properties||{},prev=STATE.cur.customer;
+  // Picking a DIFFERENT customer starts a fresh quotation — clears any plans/add-ons/services,
+  // coupon, discount and Zoho/HubSpot links carried over from the previous customer's quote.
+  // (A plans-first quote with no customer yet is preserved.)
+  const hadCustomer=!!(prev.hubspotId||String(prev.name||'').trim());
+  const isDifferent=prev.hubspotId!==(r.id||'');
+  if(hadCustomer&&isDifferent)STATE.cur=blankQuote();
+  const c=STATE.cur.customer;
   c.name=((p.firstname||'')+' '+(p.lastname||'')).trim()||c.name;c.email=p.email||'';c.phone=p.phone||'';c.city=p.city||'';
   c.pincode=p.pincode||p.zip||'';
   // State is derived from PIN -> City (HubSpot's own state field is unreliable). Leave blank if neither resolves.
   STATE.cur._stateManual=false;c.state=deriveStateAuto(c);
   c.propertyName=firstVal(p.hotel_name,p.property_name,p.hotel_name_enriched,p.enrichment_hotel_name,p.referred_hotel_name);c.roomCount=parseRooms(p);c.hubspotId=r.id;c.zohoId='';c.ownerId=p.hubspot_owner_id||'';STATE.cur._pinState=!!c.state;
   $('custResults').className='dropdown';$('custSearch').value='';
-  $('zohoMatchInfo').textContent='';syncFormFromState();resolveTax();resolveOwnerPOC(c.ownerId);syncRoomLicense();renderWizard();renderLines();markDirty();render();
+  $('zohoMatchInfo').textContent='';computeStep();syncFormFromState();resolveTax();resolveOwnerPOC(c.ownerId);syncRoomLicense();renderWizard();renderLines();renderCoupons();markDirty();render();
 }
 async function resolveOwnerPOC(id){
   if(!id)return;
