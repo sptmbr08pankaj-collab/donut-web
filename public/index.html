@@ -1842,7 +1842,11 @@ async function loadSummaries(){
   }
   SUM=all.filter(e=>isTrackable(e.status));CUSTPOC=null;populateYears();
 }
-const PERIOD_SCAN=700,DEFAULT_SCAN=300;
+// Detail scan covers the WHOLE trackable dataset so discount / plan-mix / term figures match the
+// count/quoted/accepted KPIs (which use every quotation). Was 300 for All-time, which understated
+// "Total discount" (only ~1/3 of quotes were scanned). Scanning is incremental + cached (2-day TTL),
+// so the full pull happens once. Sized above the current trackable count (~900) with headroom.
+const PERIOD_SCAN=2000,DEFAULT_SCAN=2000;
 function loadDetMap(){try{const c=JSON.parse(localStorage.getItem(DET_KEY)||'null');if(c&&c.map&&(Date.now()-c.at<2*864e5))DETMAP=c.map;}catch(e){}}
 function saveDetMap(){try{localStorage.setItem(DET_KEY,JSON.stringify({at:Date.now(),map:DETMAP}));}catch(e){}}
 function detRows(){return Object.keys(DETMAP).map(k=>DETMAP[k]);}
@@ -2183,7 +2187,7 @@ function render(){
   aovTable();renderCharts();dueTable();termCards();termTable('termQTable','quarter');termTable('termYTable','year');
   $('sumScope').textContent='· '+periodLabel()+' · '+statusLabel();
   $('pocNote').textContent='AOV = total quoted value ÷ distinct customers (multiple quotations for the same customer count as one). Customers = distinct customers on accepted/invoiced quotes. Avg disc % is averaged over discounted quotes only. Click a column header to sort.';
-  $('caveat').innerHTML='Counts, value, AOV, customers and ranks use <b>all quotations in the selected period</b> (grouped by salesperson). Discount, plan/add-on, term and per-item figures use <b>'+detRows().length+' scanned quotations</b> — for a specific period every quote in that period is scanned (so older months like May are fully covered). Trends (month-on-month & year-on-year) reflect the selected POC and status. Outstanding payments come from Zoho invoices.';
+  $('caveat').innerHTML='Counts, value, AOV, customers and ranks use <b>all quotations in the selected period</b> (grouped by salesperson). Discount, plan/add-on, term and per-item figures use <b>'+detRows().length+' scanned quotations</b> — every quotation in the selected range (including All time) is scanned, so these now match the count/value KPIs. Trends (month-on-month & year-on-year) reflect the selected POC and status. Outstanding payments come from Zoho invoices.';
 }
 async function build(force){
   $('dashRebuild').disabled=true;
